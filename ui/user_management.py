@@ -1034,3 +1034,150 @@ class UserDialog(QDialog):
             )
         finally:
             self.db_connection.close_session(session)
+
+
+class RoleDialog(QDialog):
+    """Diálogo para agregar o editar roles"""
+    
+    def __init__(self, parent=None, db_connection=None, role_id=None):
+        """Inicializa el diálogo de rol
+        
+        Args:
+            parent (QWidget, optional): Widget padre
+            db_connection (DatabaseConnection, optional): Conexión a la base de datos
+            role_id (int, optional): ID del rol a editar, None para nuevo rol
+        """
+        super().__init__(parent)
+        
+        self.db_connection = db_connection
+        self.role_id = role_id
+        self.role = None
+        
+        # Configurar el diálogo
+        self.setWindowTitle("Editar Rol" if role_id else "Agregar Rol")
+        self.setMinimumWidth(400)
+        
+        # Cargar el rol si se está editando
+        if role_id:
+            self.load_role()
+        
+        # Inicializar la interfaz
+        self.init_ui()
+    
+    def load_role(self):
+        """Carga los datos del rol a editar"""
+        session = self.db_connection.get_session()
+        try:
+            self.role = session.query(Role).filter(Role.id == self.role_id).first()
+        except SQLAlchemyError as e:
+            QMessageBox.critical(
+                self,
+                "Error",
+                f"Error al cargar rol: {str(e)}"
+            )
+        finally:
+            self.db_connection.close_session(session)
+    
+    def init_ui(self):
+        """Inicializa los componentes de la interfaz"""
+        # Layout principal
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(20, 20, 20, 20)
+        main_layout.setSpacing(15)
+        
+        # Formulario
+        form_layout = QFormLayout()
+        form_layout.setSpacing(10)
+        
+        # Campos del formulario
+        self.name_input = QLineEdit()
+        self.name_input.setPlaceholderText("Ingrese nombre del rol")
+        if self.role:
+            self.name_input.setText(self.role.name)
+        
+        self.description_input = QLineEdit()
+        self.description_input.setPlaceholderText("Ingrese descripción del rol")
+        if self.role:
+            self.description_input.setText(self.role.description or "")
+        
+        # Agregar campos al formulario
+        form_layout.addRow("Nombre:", self.name_input)
+        form_layout.addRow("Descripción:", self.description_input)
+        
+        main_layout.addLayout(form_layout)
+        
+        # Botones
+        button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        button_box.accepted.connect(self.save_role)
+        button_box.rejected.connect(self.reject)
+        
+        main_layout.addWidget(button_box)
+    
+    def save_role(self):
+        """Guarda los datos del rol"""
+        # Validar campos
+        name = self.name_input.text().strip()
+        description = self.description_input.text().strip()
+        
+        # Validar campos obligatorios
+        if not name:
+            QMessageBox.warning(
+                self,
+                "Campo Requerido",
+                "El nombre del rol es obligatorio."
+            )
+            self.name_input.setFocus()
+            return
+        
+        # Guardar rol
+        session = self.db_connection.get_session()
+        try:
+            if self.role_id:  # Actualizar rol existente
+                role = session.query(Role).filter(Role.id == self.role_id).first()
+                if role:
+                    role.name = name
+                    role.description = description
+                    
+                    session.commit()
+                    QMessageBox.information(
+                        self,
+                        "Rol Actualizado",
+                        "El rol ha sido actualizado correctamente."
+                    )
+                    self.accept()
+            else:  # Crear nuevo rol
+                # Verificar si el rol ya existe
+                existing_role = session.query(Role).filter(Role.name == name).first()
+                if existing_role:
+                    QMessageBox.warning(
+                        self,
+                        "Rol Duplicado",
+                        "Ya existe un rol con ese nombre."
+                    )
+                    self.name_input.setFocus()
+                    return
+                
+                # Crear nuevo rol
+                new_role = Role(
+                    name=name,
+                    description=description
+                )
+                
+                session.add(new_role)
+                session.commit()
+                
+                QMessageBox.information(
+                    self,
+                    "Rol Creado",
+                    "El rol ha sido creado correctamente."
+                )
+                self.accept()
+        except SQLAlchemyError as e:
+            session.rollback()
+            QMessageBox.critical(
+                self,
+                "Error",
+                f"Error al guardar rol: {str(e)}"
+            )
+        finally:
+            self.db_connection.close_session(session)
