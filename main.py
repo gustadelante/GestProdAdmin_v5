@@ -21,7 +21,7 @@ from config.settings import AppSettings
 def setup_application():
     """Configuración inicial de la aplicación"""
     # Configurar información de la aplicación
-    QCoreApplication.setOrganizationName("MiEmpresa")
+    QCoreApplication.setOrganizationName("P")
     QCoreApplication.setApplicationName("GestProdAdmin")
     QCoreApplication.setApplicationVersion("1.0.0")
     
@@ -40,9 +40,8 @@ def main():
     # Cargar configuraciones
     settings = AppSettings()
     
-    # Crear y mostrar la ventana principal
+    # Crear la ventana principal (pero no mostrarla todavía)
     window = MainWindow(settings)
-    window.show()
     
     # Ejecutar el bucle de eventos
     sys.exit(app.exec())

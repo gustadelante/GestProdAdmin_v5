@@ -254,6 +254,8 @@ class MainWindow(QMainWindow):
         else:
             # Actualizar la visibilidad de los menús después del inicio de sesión
             self.update_menu_visibility()
+            # Mostrar la ventana principal después de un login exitoso
+            self.show()
     
     def set_auth_manager(self, auth_manager):
         """Establece el gestor de autenticación
