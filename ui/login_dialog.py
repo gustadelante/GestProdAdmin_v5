@@ -174,3 +174,16 @@ class LoginDialog(QDialog):
                 "Error de Autenticación",
                 "Usuario o contraseña incorrectos."
             )
+    
+    def keyPressEvent(self, event):
+        """Maneja los eventos de teclado
+        
+        Args:
+            event (QKeyEvent): Evento de teclado
+        """
+        # Si se presiona Enter, intentar iniciar sesión
+        if event.key() == Qt.Key_Return or event.key() == Qt.Key_Enter:
+            self.login()
+        else:
+            # Pasar el evento al padre para manejo estándar
+            super().keyPressEvent(event)

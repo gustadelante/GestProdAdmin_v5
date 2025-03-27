@@ -45,6 +45,9 @@ class MainWindow(QMainWindow):
         # Inicializar la interfaz
         self.init_ui()
         
+        # Asegurar que el menú siempre esté visible al iniciar
+        self.settings.set_value('ui/menu_visible', True)
+        
         # Mostrar el diálogo de inicio de sesión al iniciar
         QTimer.singleShot(100, self.show_login_dialog)
     
@@ -59,11 +62,21 @@ class MainWindow(QMainWindow):
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
         
+        # Contenedor del panel lateral
+        self.side_container = QFrame()
+        self.side_container.setObjectName("sideContainer")
+        self.side_container.setMinimumWidth(50)
+        self.side_container.setMaximumWidth(250)
+        
+        # Layout del contenedor lateral
+        side_container_layout = QVBoxLayout(self.side_container)
+        side_container_layout.setContentsMargins(0, 0, 0, 0)
+        side_container_layout.setSpacing(0)
+        
         # Panel lateral (menú)
         self.side_menu = QFrame()
         self.side_menu.setObjectName("sideMenu")
         self.side_menu.setMinimumWidth(250)
-        self.side_menu.setMaximumWidth(250)
         
         # Layout del menú lateral
         side_menu_layout = QVBoxLayout(self.side_menu)
@@ -95,11 +108,30 @@ class MainWindow(QMainWindow):
         self.btn_toggle_theme.clicked.connect(self.toggle_theme)
         side_menu_layout.addWidget(self.btn_toggle_theme)
         
+        # Agregar el menú al contenedor lateral
+        side_container_layout.addWidget(self.side_menu)
+        
+        # Panel de control (siempre visible)
+        self.control_panel = QFrame()
+        self.control_panel.setObjectName("controlPanel")
+        self.control_panel.setMinimumHeight(100)
+        self.control_panel.setMaximumHeight(100)
+        
+        # Layout del panel de control
+        control_layout = QVBoxLayout(self.control_panel)
+        control_layout.setContentsMargins(0, 0, 0, 0)
+        control_layout.setSpacing(5)
+        
+        # El botón de pin ha sido eliminado
+        
         # Botón para ocultar/mostrar menú
         self.btn_toggle_menu = QPushButton("<<")
         self.btn_toggle_menu.setObjectName("btnToggleMenu")
         self.btn_toggle_menu.clicked.connect(self.toggle_menu)
-        side_menu_layout.addWidget(self.btn_toggle_menu)
+        control_layout.addWidget(self.btn_toggle_menu)
+        
+        # Agregar el panel de control al contenedor lateral
+        side_container_layout.addWidget(self.control_panel)
         
         # Contenedor principal
         self.content_container = QFrame()
@@ -152,7 +184,7 @@ class MainWindow(QMainWindow):
         content_layout.addWidget(self.pages)
         
         # Agregar widgets al layout principal
-        main_layout.addWidget(self.side_menu)
+        main_layout.addWidget(self.side_container)
         main_layout.addWidget(self.content_container)
         
         # Conectar señales de los botones del menú
@@ -196,23 +228,34 @@ class MainWindow(QMainWindow):
         self.pages.setCurrentIndex(index)
         self.page_title.setText(title)
     
+    # El método toggle_pin_menu ha sido eliminado
+    
     def toggle_menu(self):
         """Oculta o muestra el menú lateral con animación"""
         width = self.side_menu.width()
-        target_width = 50 if width > 50 else 250
         
-        # Crear animación
+        # Si el menú está expandido, contraerlo
+        # Si está contraído, expandirlo a 250px
+        if width > 50:
+            target_width = 0
+        else:
+            target_width = 250
+        
+        # Crear animación para el menú
         self.animation = QPropertyAnimation(self.side_menu, b"minimumWidth")
         self.animation.setDuration(300)
         self.animation.setStartValue(width)
         self.animation.setEndValue(target_width)
         self.animation.setEasingCurve(QEasingCurve.InOutQuart)
         
+        # También actualizar el maximumWidth para que coincida
+        self.side_menu.setMaximumWidth(target_width)
+        
         # Iniciar animación
         self.animation.start()
         
         # Cambiar el texto del botón
-        if target_width == 50:
+        if target_width <= 50:
             self.btn_toggle_menu.setText(">>")  
             self.settings.set_value('ui/menu_visible', False)
         else:

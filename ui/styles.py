@@ -137,6 +137,17 @@ def get_stylesheet(theme='light'):
         background-color: {bg_color};
     }}
     
+    /* Contenedor lateral y panel de control */
+    #sideContainer {{
+        background-color: {secondary_color};
+        border: none;
+    }}
+    
+    #controlPanel {{
+        background-color: {secondary_color};
+        border: none;
+    }}
+    
     /* Páginas */
     #pages {{
         background-color: {bg_color};
@@ -159,8 +170,12 @@ def get_stylesheet(theme='light'):
     QTableView {{
         border: 1px solid {border_color};
         background-color: {bg_color};
-        alternate-background-color: rgba(0, 0, 0, 0.05);
+        alternate-background-color: rgba(0, 0, 0, 0.1);
         gridline-color: {border_color};
+    }}
+    
+    QTableView::item {{
+        color: {text_color};
     }}
     
     QTableView::item:selected {{

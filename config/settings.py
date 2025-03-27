@@ -51,7 +51,22 @@ class AppSettings:
     
     def get_value(self, key, default=None):
         """Obtiene un valor de configuración"""
-        return self.settings.value(key, default)
+        value = self.settings.value(key, default)
+        
+        # Convertir valores de cadena a tipos apropiados
+        if isinstance(default, bool):
+            # Convertir a booleano si el valor predeterminado es booleano
+            if isinstance(value, str):
+                return value.lower() in ('true', 'yes', '1', 'on')
+            return bool(value)
+        elif isinstance(default, int):
+            # Convertir a entero si el valor predeterminado es entero
+            try:
+                return int(value)
+            except (ValueError, TypeError):
+                return default
+        
+        return value
     
     def set_value(self, key, value):
         """Establece un valor de configuración"""
