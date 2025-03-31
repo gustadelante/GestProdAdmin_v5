@@ -19,7 +19,8 @@ from PySide6.QtGui import QIcon, QFont, QColor, QPalette
 from ui.login_dialog import LoginDialog
 from ui.dashboard import DashboardWidget
 from ui.user_management import UserManagementWidget
-from ui.production import ProductionControlWidget, ProductionOFControlWidget
+from ui.production import ProductionControlWidget
+from ui.production_of_detail import ProductionOFDetailWidget
 from ui.styles import get_stylesheet, LIGHT_PALETTE, DARK_PALETTE
 
 
@@ -179,7 +180,7 @@ class MainWindow(QMainWindow):
         self.dashboard_page = DashboardWidget()
         self.user_management_page = UserManagementWidget()
         self.production_control_page = ProductionControlWidget()
-        self.production_of_control_page = ProductionOFControlWidget()
+        self.production_of_control_page = ProductionOFDetailWidget()
         self.settings_page = QWidget()  # Página de configuración (por implementar)
         
         self.pages.addWidget(self.dashboard_page)
