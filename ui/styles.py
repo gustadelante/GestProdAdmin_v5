@@ -62,12 +62,18 @@ def get_stylesheet(theme='light'):
         primary_color = "#3498db"  # Azul
         secondary_color = "#2980b9"  # Azul más oscuro
         bg_color = "#f0f5ff"  # Fondo claro
-        text_color = "#333333"  # Texto oscuro
+        text_color = "#1a1a1a"  # Texto oscuro (más oscuro para mejor contraste)
         border_color = "#dddddd"  # Bordes
         hover_color = "#2980b9"  # Hover
     
     # Estilos comunes para ambos temas
-    stylesheet = f"""
+    stylesheet = f'''
+    /* Estilos específicos para títulos y descripciones */
+    #welcomeLabel, #controlTitle, #ofControlTitle {{
+        color: #0a0a0a;
+        font-weight: bold;
+    }}
+    
     /* Estilos generales */
     QWidget {{
         font-family: 'Segoe UI', 'Arial', sans-serif;
@@ -88,7 +94,7 @@ def get_stylesheet(theme='light'):
     }}
     
     /* Botones del menú */
-    #btnDashboard, #btnUsers, #btnSettings {{
+    #btnDashboard, #btnUsers, #btnProduction, #btnSettings {{
         background-color: transparent;
         border: none;
         color: white;
@@ -97,13 +103,31 @@ def get_stylesheet(theme='light'):
         font-size: 11pt;
     }}
     
-    #btnDashboard:hover, #btnUsers:hover, #btnSettings:hover {{
+    #btnDashboard:hover, #btnUsers:hover, #btnProduction:hover, #btnSettings:hover {{
         background-color: {hover_color};
     }}
     
-    #btnDashboard:checked, #btnUsers:checked, #btnSettings:checked {{
+    #btnDashboard:checked, #btnUsers:checked, #btnProduction:checked, #btnSettings:checked {{
         background-color: {primary_color};
         border-left: 4px solid white;
+    }}
+    
+    /* Submenu de producción */
+    #productionSubmenu {{
+        background-color: {secondary_color};
+        border: 1px solid {border_color};
+        border-radius: 4px;
+        padding: 5px;
+    }}
+    
+    #productionSubmenu::item {{
+        padding: 8px 20px;
+        color: white;
+        border-radius: 3px;
+    }}
+    
+    #productionSubmenu::item:selected, #productionSubmenu::item:hover {{
+        background-color: {primary_color};
     }}
     
     /* Botones de acción */
@@ -199,6 +223,29 @@ def get_stylesheet(theme='light'):
     QMessageBox {{
         background-color: {bg_color};
     }}
-    """
+    
+    /* Botones de iconos */
+    #btnAddRow, #btnEditRow, #btnDeleteRow, #btnIconClear {{  /* Note the double braces for escaping */
+        min-width: 40px;
+        max-width: 40px;
+        min-height: 40px;
+        max-height: 40px;
+        padding: 8px;
+        border-radius: 20px;
+        background-color: {primary_color};
+        color: white; /* Color del icono */
+        qproperty-iconSize: 24px;
+    }}
+    
+    #btnAddRow:hover, #btnEditRow:hover, #btnDeleteRow:hover, #btnIconClear:hover {{
+        background-color: {hover_color};
+    }}
+    
+    /* Asegurar que los iconos SVG sean visibles */
+    QPushButton QIcon {{
+        color: white;
+        fill: white;
+    }}
+    '''
     
     return stylesheet

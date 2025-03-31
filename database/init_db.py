@@ -59,6 +59,16 @@ def init_database():
             ),
             'settings': create_permission_if_not_exists(
                 session, 'Configuración', 'Acceso a la configuración', 'SETTINGS'
+            ),
+            # Nuevos permisos para el módulo de producción
+            'production': create_permission_if_not_exists(
+                session, 'Producción', 'Acceso al módulo de producción', 'PRODUCTION'
+            ),
+            'production_control': create_permission_if_not_exists(
+                session, 'Control de Producción', 'Acceso al control de producción', 'PRODUCTION_CONTROL'
+            ),
+            'production_of_control': create_permission_if_not_exists(
+                session, 'Control de Órdenes de Fabricación', 'Acceso al control de órdenes de fabricación', 'PRODUCTION_OF_CONTROL'
             )
         }
         
@@ -77,9 +87,11 @@ def init_database():
             session, 'operator', 'Operador del sistema'
         )
         
-        # Asignar solo el permiso de dashboard al rol de operador
-        if permissions['dashboard'] not in operator_role.permissions:
-            operator_role.permissions.append(permissions['dashboard'])
+        # Asignar permisos al rol de operador
+        operator_permissions = ['dashboard', 'production', 'production_control', 'production_of_control']
+        for perm_key in operator_permissions:
+            if permissions[perm_key] not in operator_role.permissions:
+                operator_role.permissions.append(permissions[perm_key])
         
         session.commit()
         

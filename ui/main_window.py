@@ -19,6 +19,7 @@ from PySide6.QtGui import QIcon, QFont, QColor, QPalette
 from ui.login_dialog import LoginDialog
 from ui.dashboard import DashboardWidget
 from ui.user_management import UserManagementWidget
+from ui.production import ProductionControlWidget, ProductionOFControlWidget
 from ui.styles import get_stylesheet, LIGHT_PALETTE, DARK_PALETTE
 
 
@@ -93,10 +94,12 @@ class MainWindow(QMainWindow):
         # Botones del menú
         self.btn_dashboard = self.create_menu_button("Dashboard", "dashboard")
         self.btn_users = self.create_menu_button("Usuarios", "users")
+        self.btn_production = self.create_menu_button("Producción", "production")
         self.btn_settings = self.create_menu_button("Configuración", "settings")
         
         side_menu_layout.addWidget(self.btn_dashboard)
         side_menu_layout.addWidget(self.btn_users)
+        side_menu_layout.addWidget(self.btn_production)
         side_menu_layout.addWidget(self.btn_settings)
         
         # Espaciador para empujar los botones hacia arriba
@@ -175,10 +178,14 @@ class MainWindow(QMainWindow):
         # Páginas
         self.dashboard_page = DashboardWidget()
         self.user_management_page = UserManagementWidget()
+        self.production_control_page = ProductionControlWidget()
+        self.production_of_control_page = ProductionOFControlWidget()
         self.settings_page = QWidget()  # Página de configuración (por implementar)
         
         self.pages.addWidget(self.dashboard_page)
         self.pages.addWidget(self.user_management_page)
+        self.pages.addWidget(self.production_control_page)
+        self.pages.addWidget(self.production_of_control_page)
         self.pages.addWidget(self.settings_page)
         
         content_layout.addWidget(self.pages)
@@ -190,7 +197,8 @@ class MainWindow(QMainWindow):
         # Conectar señales de los botones del menú
         self.btn_dashboard.clicked.connect(lambda: self.change_page(0, "Dashboard"))
         self.btn_users.clicked.connect(lambda: self.change_page(1, "Gestión de Usuarios"))
-        self.btn_settings.clicked.connect(lambda: self.change_page(2, "Configuración"))
+        self.btn_production.clicked.connect(self.show_production_submenu)
+        self.btn_settings.clicked.connect(lambda: self.change_page(4, "Configuración"))
     
     def create_menu_button(self, text, object_name):
         """Crea un botón para el menú lateral
@@ -216,7 +224,7 @@ class MainWindow(QMainWindow):
             title (str): Título de la página
         """
         # Desmarcar todos los botones
-        for btn in [self.btn_dashboard, self.btn_users, self.btn_settings]:
+        for btn in [self.btn_dashboard, self.btn_users, self.btn_production, self.btn_settings]:
             btn.setChecked(False)
         
         # Marcar el botón actual
@@ -329,6 +337,10 @@ class MainWindow(QMainWindow):
         has_user_management = self.auth_manager.check_permission('USER_MANAGEMENT')
         self.btn_users.setVisible(has_user_management)
         
+        # Verificar permisos para producción
+        has_production = self.auth_manager.check_permission('PRODUCTION')
+        self.btn_production.setVisible(has_production)
+        
         # Verificar permisos para configuración
         has_settings = self.auth_manager.check_permission('SETTINGS')
         self.btn_settings.setVisible(has_settings)
@@ -337,6 +349,46 @@ class MainWindow(QMainWindow):
         # redirigir al dashboard
         current_index = self.pages.currentIndex()
         if (current_index == 1 and not has_user_management) or \
-           (current_index == 2 and not has_settings):
+           (current_index in [2, 3] and not has_production) or \
+           (current_index == 4 and not has_settings):
             self.change_page(0, "Dashboard")
             self.btn_dashboard.setChecked(True)
+    
+    def show_production_submenu(self):
+        """Muestra un menú contextual con las opciones de producción"""
+        from PySide6.QtWidgets import QMenu
+        from PySide6.QtCore import QPoint
+        
+        # Marcar el botón de producción como seleccionado
+        self.btn_production.setChecked(True)
+        
+        # Crear menú contextual
+        menu = QMenu(self)
+        menu.setObjectName("productionSubmenu")
+        
+        # Verificar permisos específicos para cada opción de producción
+        has_production_control = self.auth_manager.check_permission('PRODUCTION_CONTROL')
+        has_production_of_control = self.auth_manager.check_permission('PRODUCTION_OF_CONTROL')
+        
+        # Agregar opciones solo si el usuario tiene los permisos correspondientes
+        action_control = None
+        action_of_control = None
+        
+        if has_production_control:
+            action_control = menu.addAction("Control de Producción")
+            action_control.triggered.connect(lambda: self.change_page(2, "Control de Producción"))
+        
+        if has_production_of_control:
+            action_of_control = menu.addAction("Control de Órdenes de Fabricación")
+            action_of_control.triggered.connect(lambda: self.change_page(3, "Control de Órdenes de Fabricación"))
+        
+        # Mostrar menú bajo el botón de producción solo si hay opciones disponibles
+        if not menu.isEmpty():
+            button_pos = self.btn_production.mapToGlobal(QPoint(0, self.btn_production.height()))
+            menu.exec(button_pos)
+            
+            # Desmarcar el botón de producción si no se seleccionó ninguna opción
+            # o si se cerró el menú sin seleccionar nada
+            current_index = self.pages.currentIndex()
+            if current_index not in [2, 3]:
+                self.btn_production.setChecked(False)
