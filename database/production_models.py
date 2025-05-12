@@ -110,3 +110,66 @@ class ProductionData:
         except sqlite3.Error as e:
             logging.error(f"Error al obtener datos de producción: {str(e)}")
             return [], []
+
+    def insert_row(self, table_name: str, columns: list, row_data: list) -> bool:
+        """
+        Inserta una nueva fila en la tabla especificada.
+        Args:
+            table_name (str): Nombre de la tabla
+            columns (list): Lista de nombres de columnas
+            row_data (list): Valores a insertar
+        Returns:
+            bool: True si la inserción fue exitosa, False en caso contrario
+        """
+        try:
+            placeholders = ','.join(['?'] * len(row_data))
+            cols = ','.join(columns)
+            query = f"INSERT INTO {table_name} ({cols}) VALUES ({placeholders})"
+            self.cursor.execute(query, row_data)
+            self.connection.commit()
+            return True
+        except sqlite3.Error as e:
+            logging.error(f"Error al insertar fila: {str(e)}")
+            return False
+
+    def update_row(self, table_name: str, columns: list, row_data: list, where_fields: list, where_values: list) -> bool:
+        """
+        Actualiza una fila existente en la tabla especificada usando múltiples claves.
+        Args:
+            table_name (str): Nombre de la tabla
+            columns (list): Lista de nombres de columnas
+            row_data (list): Nuevos valores
+            where_fields (list): Lista de nombres de campos clave
+            where_values (list): Lista de valores de los campos clave
+        Returns:
+            bool: True si la actualización fue exitosa, False en caso contrario
+        """
+        try:
+            set_clause = ', '.join([f"{col} = ?" for col in columns])
+            where_clause = ' AND '.join([f"{field} = ?" for field in where_fields])
+            query = f"UPDATE {table_name} SET {set_clause} WHERE {where_clause}"
+            self.cursor.execute(query, row_data + where_values)
+            self.connection.commit()
+            return True
+        except sqlite3.Error as e:
+            logging.error(f"Error al actualizar fila: {str(e)}")
+            return False
+
+    def delete_row(self, table_name: str, pk_name: str, pk_value) -> bool:
+        """
+        Elimina una fila de la tabla especificada.
+        Args:
+            table_name (str): Nombre de la tabla
+            pk_name (str): Nombre de la columna clave primaria
+            pk_value: Valor de la clave primaria
+        Returns:
+            bool: True si la eliminación fue exitosa, False en caso contrario
+        """
+        try:
+            query = f"DELETE FROM {table_name} WHERE {pk_name} = ?"
+            self.cursor.execute(query, (pk_value,))
+            self.connection.commit()
+            return True
+        except sqlite3.Error as e:
+            logging.error(f"Error al eliminar fila: {str(e)}")
+            return False

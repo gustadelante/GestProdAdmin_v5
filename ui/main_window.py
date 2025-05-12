@@ -366,28 +366,30 @@ class MainWindow(QMainWindow):
         # Crear menú contextual
         menu = QMenu(self)
         menu.setObjectName("productionSubmenu")
-        
+
         # Verificar permisos específicos para cada opción de producción
         has_production_control = self.auth_manager.check_permission('PRODUCTION_CONTROL')
         has_production_of_control = self.auth_manager.check_permission('PRODUCTION_OF_CONTROL')
-        
+
         # Agregar opciones solo si el usuario tiene los permisos correspondientes
-        action_control = None
-        action_of_control = None
-        
         if has_production_control:
             action_control = menu.addAction("Control de Producción")
             action_control.triggered.connect(lambda: self.change_page(2, "Control de Producción"))
-        
+
         if has_production_of_control:
             action_of_control = menu.addAction("Control de Órdenes de Fabricación")
-            action_of_control.triggered.connect(lambda: self.change_page(3, "Control de Órdenes de Fabricación"))
-        
+            def go_to_of_control():
+                self.change_page(3, "Control de Órdenes de Fabricación")
+                # Forzar recarga de datos al acceder a la vista
+                if hasattr(self.production_of_control_page, 'load_of_list'):
+                    self.production_of_control_page.load_of_list()
+            action_of_control.triggered.connect(go_to_of_control)
+
         # Mostrar menú bajo el botón de producción solo si hay opciones disponibles
         if not menu.isEmpty():
             button_pos = self.btn_production.mapToGlobal(QPoint(0, self.btn_production.height()))
             menu.exec(button_pos)
-            
+
             # Desmarcar el botón de producción si no se seleccionó ninguna opción
             # o si se cerró el menú sin seleccionar nada
             current_index = self.pages.currentIndex()
