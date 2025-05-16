@@ -60,7 +60,7 @@ class ProductionTableModel(QAbstractTableModel):
             
             # Definir el orden exacto de las columnas
             desired_order = ["of", "bobina_num", "sec", "ancho", "peso", "gramaje", "diametro", 
-                            "fecha", "turno", "codcal", "desccal", "alistamiento", "calidad", "observaciones", "created_at", "obs"]
+                            "fecha", "turno", "codprod", "descprod", "alistamiento", "calidad", "observaciones", "created_at", "obs"]
             
             # Crear un diccionario para mapear columnas a sus índices originales
             column_indices = {col: idx for idx, col in enumerate(columns)}
@@ -266,16 +266,23 @@ class ProductionTableModel(QAbstractTableModel):
         self.production_data.connect()
         # Excluir columnas calculadas/no persistentes
         db_columns = [col for col in self.column_names if col.lower() != 'obs']
-        db_row_data = row_data[:len(db_columns)]
+        # Obtener codprod y descprod desde row_data según el índice de las columnas
+        if 'codprod' in [c.lower() for c in db_columns] and 'descprod' in [c.lower() for c in db_columns]:
+            idx_codprod = [c.lower() for c in self.column_names].index('codprod')
+            idx_descprod = [c.lower() for c in self.column_names].index('descprod')
+            codprod = row_data[idx_codprod]
+            descprod = row_data[idx_descprod]
+            db_row_data = row_data[:len(db_columns)]
+            db_row_data[idx_codprod] = codprod
+            db_row_data[idx_descprod] = descprod
         self.production_data.insert_row(self.table_name, db_columns, db_row_data)
         self.production_data.disconnect()
         # Insertar la nueva fila en memoria
         row_index = len(self.data_rows)
         self.beginInsertRows(QModelIndex(), row_index, row_index)
         self.data_rows.append(row_data)
-        self.endInsertRows()
         return row_index
-    
+
     def update_row(self, row_index, row_data):
         """
         Actualiza una fila existente y la persiste en la base de datos usando bobina y sec como clave.
@@ -286,31 +293,44 @@ class ProductionTableModel(QAbstractTableModel):
             bool: True si la actualización fue exitosa, False en caso contrario
         """
         if 0 <= row_index < len(self.data_rows):
-            # Persistir en la base de datos usando bobina y sec
+            # Actualizar en la base de datos
             self.production_data.connect()
             db_columns = [col for col in self.column_names if col.lower() != 'obs']
             db_row_data = row_data[:len(db_columns)]
+            
+            # Buscar 'bobina_num' y 'sec' como clave para la actualización
             try:
-                idx_bobina = [c.lower() for c in self.column_names].index('bobina')
-                idx_sec = [c.lower() for c in self.column_names].index('sec')
+                # Normalizar nombres de columnas para búsqueda flexible
+                def normalize(col):
+                    return col.strip().replace(' ', '').lower()
+                
+                idx_bobina = [normalize(c) for c in self.column_names].index('bobina_num')
+                idx_sec = [normalize(c) for c in self.column_names].index('sec')
+                
+                bobina_value = self.data_rows[row_index][idx_bobina]
+                sec_value = self.data_rows[row_index][idx_sec]
+                
+                # Actualizar en la base de datos
+                result = self.production_data.update_row(
+                    self.table_name, db_columns, db_row_data,
+                    ['bobina_num', 'sec'], [bobina_value, sec_value]
+                )
+                self.production_data.disconnect()
+                
+                if result:
+                    # Actualizar en memoria
+                    self.data_rows[row_index] = row_data
+                    top_left = self.index(row_index, 0)
+                    bottom_right = self.index(row_index, len(self.column_names) - 1)
+                    self.dataChanged.emit(top_left, bottom_right)
+                    return True
+                return False
             except ValueError:
+                print("Error: No se encontraron columnas 'bobina_num' y/o 'sec'")
                 self.production_data.disconnect()
                 return False
-            bobina_value = row_data[idx_bobina]
-            sec_value = row_data[idx_sec]
-            self.production_data.update_row(
-                self.table_name, db_columns, db_row_data,
-                ['bobina', 'sec'], [bobina_value, sec_value]
-            )
-            self.production_data.disconnect()
-            # Actualizar en memoria
-            self.data_rows[row_index] = row_data
-            top_left = self.index(row_index, 0)
-            bottom_right = self.index(row_index, len(self.column_names) - 1)
-            self.dataChanged.emit(top_left, bottom_right)
-            return True
         return False
-    
+
     def delete_row(self, row_index):
         """
         Elimina una fila del modelo y de la base de datos.

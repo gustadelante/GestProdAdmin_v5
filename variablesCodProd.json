@@ -1,0 +1,28 @@
+{
+    "Alistamiento": [
+      { "codigo": "01", "nombre": "Bobinas" },
+      { "codigo": "02", "nombre": "Tortas" },
+      { "codigo": "03", "nombre": "Bancales" }
+    ],
+    "Productos": [
+      { "codigo": "01", "nombre": "Onda Liner" },
+      { "codigo": "02", "nombre": "Covering" },
+      { "codigo": "03", "nombre": "L.Blanco" },
+      { "codigo": "04", "nombre": "Cart.Gris" },
+      { "codigo": "05", "nombre": "Cart.Blanca" },
+      { "codigo": "06", "nombre": "L.PER" },
+      { "codigo": "07", "nombre": "Onda C" }
+    ],
+    "Calidad": [
+      { "codigo": "01", "nombre": "Starndard" },
+      { "codigo": "02", "nombre": "Segunda Sel." },
+      { "codigo": "03", "nombre": "Rebobinado" },
+      { "codigo": "04", "nombre": "Hojas Standard" },
+      { "codigo": "05", "nombre": "Hojas Bifaz" }
+    ],
+    "Observaciones": [
+      { "codigo": "00", "nombre": "" },
+      { "codigo": "01", "nombre": "Enc.Simple" },
+      { "codigo": "03", "nombre": "Enc.Total" }
+    ]
+  }

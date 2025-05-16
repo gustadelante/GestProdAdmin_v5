@@ -22,6 +22,96 @@ from ui.icons import ADD_ICON, EDIT_ICON, DELETE_ICON, CLEAR_ICON, svg_to_icon
 
 class ProductionControlWidget(QWidget):
     """Widget para el control de producción"""
+
+    # ...
+
+    def delete_selected_rows(self):
+        """Elimina las filas seleccionadas"""
+        selected_rows = self.production_table.selectionModel().selectedRows()
+        if not selected_rows:
+            QMessageBox.warning(
+                self,
+                "Sin Selección",
+                "Por favor, seleccione al menos un registro para eliminar."
+            )
+            return
+        confirm = QMessageBox.question(
+            self,
+            "Confirmar Eliminación",
+            f"¿Está seguro de que desea eliminar {len(selected_rows)} registro(s)?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+        if confirm == QMessageBox.Yes:
+            # Convertir índices del modelo proxy al modelo fuente y ordenarlos en orden descendente
+            source_indices = [self.proxy_model.mapToSource(index).row() for index in selected_rows]
+            source_indices.sort(reverse=True)
+            # Eliminar filas
+            for row_index in source_indices:
+                self.table_model.delete_row(row_index)
+            # Refrescar la grilla
+            self.table_model.load_data(self.table_model.table_name)
+            QMessageBox.information(
+                self,
+                "Registros Eliminados",
+                f"{len(selected_rows)} registro(s) han sido eliminados correctamente de la base de datos."
+            )
+            self.btn_edit_row.setEnabled(False)
+            self.btn_delete_row.setEnabled(False)
+
+    """Widget para el control de producción"""
+
+    # ...
+
+    def show_edit_row_dialog(self):
+        """Muestra el diálogo para editar una fila seleccionada"""
+        # Obtener la fila seleccionada
+        selected_rows = self.production_table.selectionModel().selectedRows()
+        if not selected_rows:
+            QMessageBox.warning(
+                self,
+                "Sin Selección",
+                "Por favor, seleccione un registro para editar."
+            )
+            return
+        # Solo permitir editar una fila a la vez
+        if len(selected_rows) > 1:
+            QMessageBox.warning(
+                self,
+                "Múltiples Selecciones",
+                "Por favor, seleccione solo un registro para editar a la vez."
+            )
+            return
+        # Obtener el índice de la fila seleccionada
+        proxy_index = selected_rows[0]
+        row_index = self.proxy_model.mapToSource(proxy_index).row()
+        row_data = self.table_model.data_rows[row_index]
+        # Importar aquí para evitar dependencias circulares
+        from ui.production_dialog import ProductionRecordDialog
+        # Crear diálogo de edición
+        dialog = ProductionRecordDialog(self.table_model.column_names, row_data.copy(), self)
+        # Mostrar diálogo
+        if dialog.exec() == QDialog.Accepted:
+            # Obtener datos del formulario
+            new_row_data = dialog.get_row_data()
+            # Actualizar fila en el modelo y base de datos
+            updated = self.table_model.update_row(row_index, new_row_data)
+            if updated:
+                # Refrescar datos de la grilla (reload)
+                self.table_model.load_data(self.table_model.table_name)
+                QMessageBox.information(
+                    self,
+                    "Registro Actualizado",
+                    "El registro ha sido actualizado correctamente en la base de datos."
+                )
+            else:
+                QMessageBox.warning(
+                    self,
+                    "Error",
+                    "No se pudo actualizar el registro."
+                )
+
+    """Widget para el control de producción"""
     
     def __init__(self, parent=None):
         """
@@ -102,6 +192,14 @@ class ProductionControlWidget(QWidget):
         self.btn_add_row.setObjectName("btnAddRow")
         self.btn_add_row.clicked.connect(self.show_add_row_dialog)
         crud_layout.addWidget(self.btn_add_row)
+        
+        # Botón para copiar fila con icono estándar de PySide6
+        self.btn_copy_row = QPushButton()
+        self.btn_copy_row.setIcon(self.style().standardIcon(QStyle.SP_FileDialogNewFolder))
+        self.btn_copy_row.setToolTip("Copiar registro seleccionado")
+        self.btn_copy_row.setObjectName("btnCopyRow")
+        self.btn_copy_row.clicked.connect(self.show_copy_row_dialog)
+        crud_layout.addWidget(self.btn_copy_row)
         
         # Botón para editar fila con icono estándar de PySide6
         self.btn_edit_row = QPushButton()
@@ -238,16 +336,138 @@ class ProductionControlWidget(QWidget):
         # La selección ahora se maneja automáticamente por el QTableView
         # ya que está configurado con QTableView.SelectRows y QTableView.MultiSelection
         # Habilitar/deshabilitar botones según la selección
-        has_selection = len(self.production_table.selectionModel().selectedRows()) > 0
-        self.btn_edit_row.setEnabled(has_selection and len(self.production_table.selectionModel().selectedRows()) == 1)
+        selected_rows = self.production_table.selectionModel().selectedRows()
+        has_selection = len(selected_rows) > 0
+        single_selection = len(selected_rows) == 1
+        
+        self.btn_edit_row.setEnabled(has_selection and single_selection)
+        self.btn_copy_row.setEnabled(has_selection and single_selection)
         self.btn_delete_row.setEnabled(has_selection)
+    
+    def show_copy_row_dialog(self):
+        """Muestra el diálogo para copiar un registro existente"""
+        # Obtener la fila seleccionada
+        selected_rows = self.production_table.selectionModel().selectedRows()
+        if not selected_rows:
+            QMessageBox.warning(
+                self,
+                "Sin Selección",
+                "Por favor, seleccione un registro para copiar."
+            )
+            return
+        # Solo permitir copiar una fila a la vez
+        if len(selected_rows) > 1:
+            QMessageBox.warning(
+                self,
+                "Múltiples Selecciones",
+                "Por favor, seleccione solo un registro para copiar a la vez."
+            )
+            return
+            
+        # Obtener los datos del registro seleccionado
+        proxy_index = selected_rows[0]
+        row_index = self.proxy_model.mapToSource(proxy_index).row()
+        row_data = self.table_model.data_rows[row_index]
+        
+        # Crear diálogo con los datos del registro seleccionado
+        from ui.production_dialog import ProductionRecordDialog
+        dialog = ProductionRecordDialog(self.table_model.column_names, row_data.copy(), self, is_copy_mode=True)
+        
+        # Mostrar diálogo
+        if dialog.exec() == QDialog.Accepted:
+            # Obtener datos del formulario
+            new_row_data = dialog.get_row_data()
+            
+            # Obtener índices de las columnas
+            column_names = [name.lower() for name in self.table_model.column_names]
+            try:
+                bobina_idx = column_names.index('bobina_num')
+                sec_idx = column_names.index('sec')
+                
+                # Obtener valores originales
+                original_bobina = str(row_data[bobina_idx]) if len(row_data) > bobina_idx else ''
+                original_sec = str(row_data[sec_idx]) if len(row_data) > sec_idx else ''
+                
+                # Obtener nuevos valores
+                new_bobina = str(new_row_data[bobina_idx]) if len(new_row_data) > bobina_idx else ''
+                new_sec = str(new_row_data[sec_idx]) if len(new_row_data) > sec_idx else ''
+            except ValueError:
+                # Si no se encuentran las columnas, continuar sin validación
+                original_bobina = ''
+                original_sec = ''
+                new_bobina = ''
+                new_sec = ''
+            
+            if original_bobina == new_bobina and original_sec == new_sec:
+                QMessageBox.warning(
+                    self,
+                    "Datos Inválidos",
+                    "Debe modificar al menos el número de bobina o la secuencia para crear una copia."
+                )
+                return
+                
+            # Verificar si ya existe un registro con el mismo bobina_num y sec
+            if self._check_duplicate_bobina(new_row_data):
+                QMessageBox.warning(
+                    self,
+                    "Registro Duplicado",
+                    "Ya existe un registro con el mismo número de bobina y secuencia."
+                )
+                return
+            
+            # Agregar fila al modelo
+            source_model = self.proxy_model.sourceModel()
+            row_index = source_model.add_row(new_row_data)
+            
+            # Recargar los datos en la tabla
+            current_table = self.table_selector.currentText()
+            if current_table:
+                self.table_model.load_data(current_table)
+            
+            # Informar al usuario
+            QMessageBox.information(
+                self,
+                "Registro Copiado",
+                "El registro ha sido copiado correctamente en la base de datos."
+            )
+    
+    def _check_duplicate_bobina(self, row_data):
+        """Verifica si ya existe un registro con el mismo bobina_num y sec"""
+        try:
+            # Obtener índices de las columnas
+            column_names = [name.lower() for name in self.table_model.column_names]
+            try:
+                bobina_idx = column_names.index('bobina_num')
+                sec_idx = column_names.index('sec')
+                
+                # Obtener valores del nuevo registro
+                bobina_num = str(row_data[bobina_idx]) if len(row_data) > bobina_idx else None
+                sec = str(row_data[sec_idx]) if len(row_data) > sec_idx else None
+                
+                if bobina_num is None or sec is None:
+                    return False
+                    
+                # Buscar en los datos existentes
+                for row in self.table_model.data_rows:
+                    row_bobina = str(row[bobina_idx]) if len(row) > bobina_idx else ''
+                    row_sec = str(row[sec_idx]) if len(row) > sec_idx else ''
+                    
+                    if row_bobina == str(bobina_num) and row_sec == str(sec):
+                        return True
+                return False
+            except ValueError:
+                # Si no se encuentran las columnas, no hay duplicados
+                return False
+        except Exception as e:
+            print(f"Error verificando duplicados: {e}")
+            return False
     
     def show_add_row_dialog(self):
         """Muestra el diálogo para agregar una nueva fila"""
         from ui.production_dialog import ProductionRecordDialog
         
         # Crear diálogo con campos apropiados para cada tipo de dato
-        dialog = ProductionRecordDialog(self.table_model.column_names, None, self)
+        dialog = ProductionRecordDialog(self.table_model.column_names, None, self, is_copy_mode=False)
         
         # Mostrar diálogo
         if dialog.exec() == QDialog.Accepted:
@@ -258,103 +478,17 @@ class ProductionControlWidget(QWidget):
             source_model = self.proxy_model.sourceModel()
             row_index = source_model.add_row(row_data)
             
+            # Recargar los datos en la tabla
+            current_table = self.table_selector.currentText()
+            if current_table:
+                self.table_model.load_data(current_table)
+            
             # Informar al usuario
             QMessageBox.information(
                 self,
                 "Registro Agregado",
-                "El registro ha sido agregado correctamente a la tabla. \nNota: Los cambios solo se mantienen en memoria y no se guardan en la base de datos."
+                "El registro ha sido agregado correctamente en la base de datos."
             )
-    
-    def show_edit_row_dialog(self):
-        """Muestra el diálogo para editar una fila seleccionada"""
-        # Obtener la fila seleccionada
-        selected_rows = self.production_table.selectionModel().selectedRows()
-        if not selected_rows:
-            QMessageBox.warning(
-                self,
-                "Sin Selección",
-                "Por favor, seleccione un registro para editar."
-            )
-            return
-        
-        # Solo permitir editar una fila a la vez
-        if len(selected_rows) > 1:
-            QMessageBox.warning(
-                self,
-                "Múltiples Selecciones",
-                "Por favor, seleccione solo un registro para editar."
-            )
-            return
-        
-        # Obtener el índice de la fila seleccionada en el modelo proxy
-        proxy_index = selected_rows[0]
-        # Convertir al índice en el modelo fuente
-        source_index = self.proxy_model.mapToSource(proxy_index)
-        row_index = source_index.row()
-        
-        # Obtener los datos actuales de la fila
-        current_row_data = self.table_model.data_rows[row_index]
-        
-        # Crear diálogo con campos apropiados para cada tipo de dato
-        from ui.production_dialog import ProductionRecordDialog
-        dialog = ProductionRecordDialog(self.table_model.column_names, current_row_data, self)
-        
-        # Mostrar diálogo
-        if dialog.exec() == QDialog.Accepted:
-            # Obtener datos del formulario
-            row_data = dialog.get_row_data()
-            
-            # Actualizar fila en el modelo
-            self.table_model.update_row(row_index, row_data)
-            
-            # Informar al usuario
-            QMessageBox.information(
-                self,
-                "Registro Actualizado",
-                "El registro ha sido actualizado correctamente en la tabla. \nNota: Los cambios solo se mantienen en memoria y no se guardan en la base de datos."
-            )
-    
-    def delete_selected_rows(self):
-        """Elimina las filas seleccionadas"""
-        # Obtener las filas seleccionadas
-        selected_rows = self.production_table.selectionModel().selectedRows()
-        if not selected_rows:
-            QMessageBox.warning(
-                self,
-                "Sin Selección",
-                "Por favor, seleccione al menos un registro para eliminar."
-            )
-            return
-        
-        # Confirmar eliminación
-        confirm = QMessageBox.question(
-            self,
-            "Confirmar Eliminación",
-            f"¿Está seguro de que desea eliminar {len(selected_rows)} registro(s)?",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No
-        )
-        
-        if confirm == QMessageBox.Yes:
-            # Convertir índices del modelo proxy al modelo fuente y ordenarlos en orden descendente
-            # para evitar problemas al eliminar múltiples filas
-            source_indices = [self.proxy_model.mapToSource(index).row() for index in selected_rows]
-            source_indices.sort(reverse=True)
-            
-            # Eliminar filas
-            for row_index in source_indices:
-                self.table_model.delete_row(row_index)
-            
-            # Informar al usuario
-            QMessageBox.information(
-                self,
-                "Registros Eliminados",
-                f"{len(selected_rows)} registro(s) han sido eliminados correctamente de la tabla. \nNota: Los cambios solo se mantienen en memoria y no se guardan en la base de datos."
-            )
-            
-            # Deshabilitar botones de edición y eliminación
-            self.btn_edit_row.setEnabled(False)
-            self.btn_delete_row.setEnabled(False)
 
 
 class ProductionOFControlWidget(QWidget):

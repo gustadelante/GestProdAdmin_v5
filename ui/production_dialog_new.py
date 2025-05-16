@@ -20,7 +20,7 @@ import os
 class ProductionRecordDialog(QDialog):
     """Diálogo para agregar o editar registros de producción"""
     
-    def __init__(self, column_names, row_data=None, parent=None, is_copy_mode=False):
+    def __init__(self, column_names, row_data=None, parent=None):
         """
         Inicializa el diálogo para agregar o editar registros de producción
         
@@ -28,12 +28,8 @@ class ProductionRecordDialog(QDialog):
             column_names (list): Lista de nombres de columnas
             row_data (list, optional): Datos de la fila para edición. Si es None, se trata de un nuevo registro.
             parent (QWidget, optional): Widget padre
-            is_copy_mode (bool, optional): Si es True, se está realizando una copia de un registro existente
         """
         super().__init__(parent)
-        
-        # Guardar el modo de copia
-        self.is_copy_mode = is_copy_mode
         
         # Cargar datos de combos desde variablesCodProd.json
         self.combo_data = {
@@ -42,40 +38,22 @@ class ProductionRecordDialog(QDialog):
             "Calidad": [],
             "Observaciones": []
         }
-        self.codprod_to_nombre = {}  # Diccionario para mapear códigos a nombres de productos
-        
         json_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'variablesCodProd.json')
         try:
             with open(json_path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
                 for key in self.combo_data:
                     self.combo_data[key] = data.get(key, [])
-                    
-                # Poblar el diccionario de códigos a nombres para productos
-                if 'Productos' in data:
-                    for item in data['Productos']:
-                        if 'codigo' in item and 'nombre' in item:
-                            self.codprod_to_nombre[item['codigo']] = item['nombre']
-                            
         except Exception as e:
             print(f"Error cargando variablesCodProd.json: {e}")
         
         # Configurar el diálogo
-        if self.is_copy_mode:
-            self.setWindowTitle("Copiar Registro")
-        else:
-            self.setWindowTitle("Editar Registro" if row_data else "Agregar Registro")
+        self.setWindowTitle("Editar Registro" if row_data else "Agregar Registro")
         self.setMinimumWidth(450)
         
         # Guardar referencias
         self.column_names = column_names
-        self.is_edit_mode = row_data is not None and not is_copy_mode
-        self.field_widgets = {}  # Diccionario para mantener referencias a los widgets
-        self.is_read_only = False  # Por defecto, los campos no son de solo lectura
-        
-        # Si estamos en modo copia, forzamos el modo de solo lectura a False
-        if self.is_copy_mode:
-            self.is_read_only = False
+        self.is_edit_mode = row_data is not None
         
         # Inicializar la interfaz
         self.init_ui(row_data)
@@ -112,10 +90,25 @@ class ProductionRecordDialog(QDialog):
         form_layout = QFormLayout()
         form_layout.setFieldGrowthPolicy(QFormLayout.AllNonFixedFieldsGrow)
         
-        # Agregar el campo al formulario
+        # Crear campos de entrada para cada columna
+        self.field_widgets = {}
+        
+        # Para autocompletar descripción del producto
+        self.codprod_combo = None
+        self.descprod_widget = None
+        self.codprod_to_nombre = {item['codigo']: item['nombre'] for item in self.combo_data['Productos']}
+        
+        # Campos que deben ser de solo lectura (en minúsculas para comparación)
+        read_only_fields = [
+            'primeraunidaddemedida', 'lote', 'fechavalidezlote',
+            'fechaelaboracion', 'nroot', 'codclie',
+            'cuentacontable', 'metros'
+        ]
+        
         for col_idx, col_name in enumerate(self.column_names):
             col_name_lower = col_name.lower()
-            is_read_only = self.is_edit_mode and row_data and col_idx < len(row_data) and row_data[col_idx] is not None
+            is_read_only = col_name_lower in read_only_fields
+            
             if col_name_lower == "codprod":
                 # Combo para Productos
                 widget = QComboBox()
@@ -160,12 +153,6 @@ class ProductionRecordDialog(QDialog):
                     idx = widget.findData(row_data[col_idx])
                     if idx >= 0:
                         widget.setCurrentIndex(idx)
-            elif col_name_lower == "descprod":
-                widget = QLineEdit()
-                widget.setReadOnly(True)
-                self.descprod_widget = widget
-                if row_data and col_idx < len(row_data):
-                    widget.setText(str(row_data[col_idx]) if row_data[col_idx] is not None else "")
             elif "fecha" in col_name_lower:
                 widget = QDateEdit()
                 widget.setCalendarPopup(True)
@@ -177,7 +164,8 @@ class ProductionRecordDialog(QDialog):
                             widget.setDate(QDate(int(date_parts[0]), int(date_parts[1]), int(date_parts[2])))
                     except:
                         pass
-            elif ("peso" in col_name_lower or "gramaje" in col_name_lower or "diametro" in col_name_lower or "ancho" in col_name_lower):
+            elif ("peso" in col_name_lower or "gramaje" in col_name_lower or 
+                  "diametro" in col_name_lower or "ancho" in col_name_lower):
                 widget = QDoubleSpinBox()
                 widget.setRange(0, 9999.99)
                 widget.setDecimals(2)
@@ -208,25 +196,14 @@ class ProductionRecordDialog(QDialog):
                 if row_data and col_idx < len(row_data):
                     widget.setText(str(row_data[col_idx]) if row_data[col_idx] is not None else "")
             
-            # Lista de campos editables
-            editable_fields = [
-                'of', 'bobina_num', 'sec', 'ancho', 'peso', 'gramaje', 
-                'diametro', 'fecha', 'turno', 'codprod', 'calidad', 
-                'observaciones', 'created_at', 'obs', 'tipo_mov', 'tipomovimiento'
-            ]
+            # Hacer el campo de solo lectura si corresponde
+            if is_read_only and hasattr(widget, 'setEnabled'):
+                widget.setEnabled(False)
+                widget.setStyleSheet("background-color: #f0f0f0;")
             
             # Agregar el campo al formulario
-            if widget is not None:
-                # Hacer el campo de solo lectura si no está en la lista de editables
-                # o si estamos en modo edición (no copia) y el campo no es editable
-                if (col_name_lower not in editable_fields) and not self.is_copy_mode:
-                    if isinstance(widget, (QLineEdit, QDateEdit, QComboBox, QSpinBox, QDoubleSpinBox)):
-                        widget.setEnabled(False)
-                        widget.setStyleSheet("background-color: #f0f0f0;")
-                
-                # Agregar el widget al formulario
-                form_layout.addRow(f"{col_name}:", widget)
-                self.field_widgets[col_name] = widget
+            form_layout.addRow(f"{col_name}:", widget)
+            self.field_widgets[col_name] = widget
         
         # Conectar autocompletado de descprod si corresponde
         if self.codprod_combo and self.descprod_widget:
