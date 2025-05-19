@@ -262,25 +262,43 @@ class ProductionTableModel(QAbstractTableModel):
         """
         if row_data is None:
             row_data = self.default_row.copy()
+            
+        # Crear una copia de los datos para no modificar el original
+        row_data = list(row_data)
+        
         # Persistir en la base de datos
         self.production_data.connect()
+        
         # Excluir columnas calculadas/no persistentes
         db_columns = [col for col in self.column_names if col.lower() != 'obs']
-        # Obtener codprod y descprod desde row_data según el índice de las columnas
-        if 'codprod' in [c.lower() for c in db_columns] and 'descprod' in [c.lower() for c in db_columns]:
-            idx_codprod = [c.lower() for c in self.column_names].index('codprod')
-            idx_descprod = [c.lower() for c in self.column_names].index('descprod')
-            codprod = row_data[idx_codprod]
-            descprod = row_data[idx_descprod]
-            db_row_data = row_data[:len(db_columns)]
-            db_row_data[idx_codprod] = codprod
-            db_row_data[idx_descprod] = descprod
-        self.production_data.insert_row(self.table_name, db_columns, db_row_data)
+        
+        # Crear un diccionario temporal para mapear nombres de columna a sus valores
+        row_dict = dict(zip([col.lower() for col in self.column_names], row_data))
+        
+        # Crear la lista de datos para la base de datos usando solo las columnas que se van a guardar
+        db_row_data = []
+        for col in db_columns:
+            col_lower = col.lower()
+            if col_lower in row_dict:
+                db_row_data.append(row_dict[col_lower])
+            else:
+                # Si la columna no está en los datos, usar None
+                db_row_data.append(None)
+        
+        # Insertar en la base de datos
+        success = self.production_data.insert_row(self.table_name, db_columns, db_row_data)
         self.production_data.disconnect()
+        
+        if not success:
+            # Si hubo un error al insertar, devolver -1
+            return -1
+            
         # Insertar la nueva fila en memoria
         row_index = len(self.data_rows)
         self.beginInsertRows(QModelIndex(), row_index, row_index)
         self.data_rows.append(row_data)
+        self.endInsertRows()
+        
         return row_index
 
     def update_row(self, row_index, row_data):
