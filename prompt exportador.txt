@@ -1,0 +1,3 @@
+prompt exportador
+
+En la vista o formulario production_of_detail.py necesito agregar un boton para exportar datos. Segun la arquitectura de la aplicacion crea un nuevo archivo para gestionar la exportación de datos. Según la orden de fabricación seleccionada  necesito exportar a txt los siguientes datos de los distintos registros bobina_num y sec de la orden de factricacion seleccionada (of). Voy a detallarte los campos de cada fila que tiene que tener el txt. Cada dato tiene que ir separado por ;  Los datos son: tipo_mov;tipomovimiento;01;codigodeproducto;primeraundemedida;cantidadenprimeraudm;segundaundemedida;cantidadensegunda;;;lote;fechavalidezlote;fechaelaboracion;;;;nroot;;cuentacontable;bobina_num"/"sec;turno;producto

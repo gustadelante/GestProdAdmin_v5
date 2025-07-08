@@ -17,7 +17,7 @@ from PySide6.QtGui import QStandardItemModel, QStandardItem, QIcon
 
 import os
 from ui.production_models import ProductionTableModel, ProductionSortFilterProxyModel
-from ui.icons import ADD_ICON, EDIT_ICON, DELETE_ICON, CLEAR_ICON, svg_to_icon
+from ui.icons import ADD_ICON, EDIT_ICON, DELETE_ICON, CLEAR_ICON, COPY_ICON, svg_to_icon
 
 
 class ProductionControlWidget(QWidget):
@@ -193,9 +193,10 @@ class ProductionControlWidget(QWidget):
         self.btn_add_row.clicked.connect(self.show_add_row_dialog)
         crud_layout.addWidget(self.btn_add_row)
         
-        # Botón para copiar fila con icono estándar de PySide6
+        # Botón para copiar fila con icono SVG personalizado
         self.btn_copy_row = QPushButton()
-        self.btn_copy_row.setIcon(self.style().standardIcon(QStyle.SP_FileDialogNewFolder))
+        #self.btn_copy_row.setIcon(svg_to_icon(COPY_ICON))
+        self.btn_copy_row.setIcon(self.style().standardIcon(QStyle.SP_DialogApplyButton))
         self.btn_copy_row.setToolTip("Copiar registro seleccionado")
         self.btn_copy_row.setObjectName("btnCopyRow")
         self.btn_copy_row.clicked.connect(self.show_copy_row_dialog)
@@ -259,7 +260,8 @@ class ProductionControlWidget(QWidget):
             from database.production_models import ProductionData
             import os
             
-            db_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'produccion.db')
+            from database.db_helper import get_db_path
+            db_path = get_db_path()
             prod_data = ProductionData(db_path)
             
             if prod_data.connect():
@@ -478,10 +480,28 @@ class ProductionControlWidget(QWidget):
             source_model = self.proxy_model.sourceModel()
             row_index = source_model.add_row(row_data)
             
-            # Recargar los datos en la tabla
-            current_table = self.table_selector.currentText()
-            if current_table:
-                self.table_model.load_data(current_table)
+            # Actualizar campos vacíos según las reglas
+            if source_model.production_data.connect():
+                try:
+                    # Actualizar campos vacíos
+                    source_model.production_data.update_empty_bobinas_fields()
+                    
+                    # Forzar una recarga completa de los datos
+                    current_table = self.table_selector.currentText()
+                    if current_table:
+                        # Guardar la posición de desplazamiento actual
+                        scroll_pos = self.production_table.verticalScrollBar().value()
+                        
+                        # Recargar los datos
+                        self.table_model.load_data(current_table)
+                        
+                        # Restaurar la posición de desplazamiento
+                        QTimer.singleShot(0, lambda: self.production_table.verticalScrollBar().setValue(scroll_pos))
+                        
+                except Exception as e:
+                    logging.error(f"Error al actualizar campos vacíos: {str(e)}", exc_info=True)
+                finally:
+                    source_model.production_data.disconnect()
             
             # Informar al usuario
             QMessageBox.information(

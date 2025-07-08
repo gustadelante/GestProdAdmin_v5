@@ -29,7 +29,8 @@ class ProductionTableModel(QAbstractTableModel):
         super().__init__(parent)
         self.column_names = []
         self.data_rows = []
-        self.db_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'produccion.db')
+        from database.db_helper import get_db_path
+        self.db_path = get_db_path()
         self.production_data = ProductionData(self.db_path)
         self.table_name = ""
         self.checked_rows = set()  # Conjunto para almacenar las filas seleccionadas
@@ -59,8 +60,9 @@ class ProductionTableModel(QAbstractTableModel):
             self.beginResetModel()
             
             # Definir el orden exacto de las columnas
+            # Obs debe ir antes de observaciones
             desired_order = ["of", "bobina_num", "sec", "ancho", "peso", "gramaje", "diametro", 
-                            "fecha", "turno", "codprod", "descprod", "alistamiento", "calidad", "observaciones", "created_at", "obs"]
+                          "fecha", "turno", "codprod", "descprod", "alistamiento", "calidad", "obs", "observaciones", "created_at"]
             
             # Crear un diccionario para mapear columnas a sus índices originales
             column_indices = {col: idx for idx, col in enumerate(columns)}
@@ -161,7 +163,58 @@ class ProductionTableModel(QAbstractTableModel):
         
         if role == Qt.DisplayRole or role == Qt.EditRole:
             if 0 <= index.column() < len(self.column_names) and 0 <= index.row() < len(self.data_rows):
-                return self.data_rows[index.row()][index.column()]
+                value = self.data_rows[index.row()][index.column()]
+                
+                # Verificar si la columna es una fecha
+                col_name = self.column_names[index.column()].lower()
+                if value and ('fecha' in col_name or col_name in ['created_at', 'fechaelaboracion']):
+                    from datetime import datetime
+                    try:
+                        # Si el valor es None o está vacío, devolver cadena vacía
+                        if not value:
+                            return ""
+                        
+                        # Si ya es un objeto date o datetime, formatearlo directamente
+                        if hasattr(value, 'strftime'):
+                            return value.strftime("%d/%m/%Y")
+                            
+                        # Convertir a string y limpiar espacios
+                        date_str = str(value).strip()
+                        
+                        # Si ya está en el formato dd/MM/yyyy o empieza con ese formato, devolver solo la fecha
+                        if len(date_str) >= 10 and date_str[2] == '/' and date_str[5] == '/':
+                            # Si hay una hora después, recortar solo la fecha
+                            return date_str[:10]
+                        
+                        # Intentar diferentes formatos de fecha
+                        formats_to_try = [
+                            "%Y-%m-%d %H:%M:%S",  # Formato ISO con hora
+                            "%Y-%m-%d",           # Formato ISO sin hora
+                            "%d/%m/%Y %H:%M:%S",  # Formato español con hora
+                            "%d/%m/%Y",           # Formato español sin hora
+                            "%d-%m-%Y %H:%M:%S",  # Formato con guiones
+                            "%d-%m-%Y",           # Formato con guiones sin hora
+                            "%Y%m%d"               # Formato compacto (AAAAMMDD)
+                        ]
+                        
+                        for fmt in formats_to_try:
+                            try:
+                                # Intentar parsear la fecha
+                                clean_date_str = date_str.split('.')[0]  # Eliminar milisegundos si existen
+                                date_obj = datetime.strptime(clean_date_str, fmt)
+                                return date_obj.strftime("%d/%m/%Y")
+                            except (ValueError, IndexError):
+                                continue
+                        
+                        # Si no se pudo formatear, devolver el valor original
+                        return date_str
+                        
+                    except Exception as e:
+                        print(f"Error al formatear fecha en columna {col_name} (valor: '{value}'): {e}")
+                        return str(value) if value else ""
+                
+                # Para otros valores, devolverlos tal cual
+                return value
         
         return None
     
@@ -304,34 +357,64 @@ class ProductionTableModel(QAbstractTableModel):
     def update_row(self, row_index, row_data):
         """
         Actualiza una fila existente y la persiste en la base de datos usando bobina y sec como clave.
+        Solo actualiza los campos que han cambiado.
+        
         Args:
             row_index (int): Índice de la fila a actualizar
             row_data (list): Nuevos datos para la fila
+            
         Returns:
             bool: True si la actualización fue exitosa, False en caso contrario
         """
         if 0 <= row_index < len(self.data_rows):
-            # Actualizar en la base de datos
+            # Conectar a la base de datos
             self.production_data.connect()
-            db_columns = [col for col in self.column_names if col.lower() != 'obs']
-            db_row_data = row_data[:len(db_columns)]
             
-            # Buscar 'bobina_num' y 'sec' como clave para la actualización
+            # Obtener los datos actuales
+            current_data = self.data_rows[row_index].copy()
+            
+            # Normalizar nombres de columnas para búsqueda flexible
+            def normalize(col):
+                return str(col).strip().replace(' ', '').lower()
+            
+            # Obtener índices de las columnas clave
+            normalized_columns = [normalize(c) for c in self.column_names]
+            
             try:
-                # Normalizar nombres de columnas para búsqueda flexible
-                def normalize(col):
-                    return col.strip().replace(' ', '').lower()
+                # Buscar índices de las columnas clave
+                idx_bobina = normalized_columns.index('bobina_num')
+                idx_sec = normalized_columns.index('sec')
                 
-                idx_bobina = [normalize(c) for c in self.column_names].index('bobina_num')
-                idx_sec = [normalize(c) for c in self.column_names].index('sec')
+                # Obtener valores de las columnas clave
+                bobina_value = current_data[idx_bobina]
+                sec_value = current_data[idx_sec]
                 
-                bobina_value = self.data_rows[row_index][idx_bobina]
-                sec_value = self.data_rows[row_index][idx_sec]
+                # Determinar qué campos han cambiado
+                changed_columns = []
+                new_values = []
                 
-                # Actualizar en la base de datos
+                for i, (current_val, new_val) in enumerate(zip(current_data, row_data)):
+                    # Saltar columnas clave (bobina_num y sec)
+                    if i == idx_bobina or i == idx_sec:
+                        continue
+                        
+                    # Si el valor ha cambiado, agregar a la lista de cambios
+                    if current_val != new_val and new_val is not None:
+                        changed_columns.append(self.column_names[i])
+                        new_values.append(new_val)
+                
+                # Si no hay cambios, retornar True
+                if not changed_columns:
+                    self.production_data.disconnect()
+                    return True
+                
+                # Actualizar solo los campos que cambiaron
                 result = self.production_data.update_row(
-                    self.table_name, db_columns, db_row_data,
-                    ['bobina_num', 'sec'], [bobina_value, sec_value]
+                    self.table_name, 
+                    changed_columns,
+                    new_values,
+                    ['bobina_num', 'sec'],
+                    [bobina_value, sec_value]
                 )
                 self.production_data.disconnect()
                 
@@ -351,26 +434,59 @@ class ProductionTableModel(QAbstractTableModel):
 
     def delete_row(self, row_index):
         """
-        Elimina una fila del modelo y de la base de datos.
+        Elimina una fila del modelo y de la base de datos usando bobina_num y sec como claves.
         Args:
             row_index (int): Índice de la fila a eliminar
         Returns:
             bool: True si la eliminación fue exitosa, False en caso contrario
         """
         if 0 <= row_index < len(self.data_rows):
-            # Eliminar de la base de datos
-            self.production_data.connect()
-            db_columns = [col for col in self.column_names if col.lower() != 'obs']
-            pk_name = 'id' if 'id' in [c.lower() for c in db_columns] else db_columns[0]
-            pk_index = [c.lower() for c in self.column_names].index(pk_name)
-            pk_value = self.data_rows[row_index][pk_index]
-            self.production_data.delete_row(self.table_name, pk_name, pk_value)
-            self.production_data.disconnect()
-            # Eliminar en memoria
-            self.beginRemoveRows(QModelIndex(), row_index, row_index)
-            del self.data_rows[row_index]
-            self.endRemoveRows()
-            return True
+            try:
+                # Obtener índices de las columnas necesarias
+                col_names = [col.lower() for col in self.column_names]
+                
+                # Verificar que existan las columnas necesarias
+                if 'bobina_num' not in col_names or 'sec' not in col_names:
+                    print("Error: No se encontraron las columnas 'bobina_num' y/o 'sec'")
+                    return False
+                
+                # Obtener los valores de bobina_num y sec
+                bobina_num_index = col_names.index('bobina_num')
+                sec_index = col_names.index('sec')
+                
+                bobina_num = self.data_rows[row_index][bobina_num_index]
+                sec = self.data_rows[row_index][sec_index]
+                
+                if not bobina_num or not sec:
+                    print("Error: Los campos 'bobina_num' y 'sec' no pueden estar vacíos")
+                    return False
+                
+                # Eliminar de la base de datos usando bobina_num y sec
+                self.production_data.connect()
+                success = self.production_data.delete_row(
+                    self.table_name, 
+                    None,  # No usamos pk_name
+                    None,  # No usamos pk_value
+                    str(bobina_num),  # bobina
+                    str(sec)          # sec
+                )
+                self.production_data.disconnect()
+                
+                if not success:
+                    print("Error al eliminar la fila de la base de datos")
+                    return False
+                
+                # Eliminar en memoria
+                self.beginRemoveRows(QModelIndex(), row_index, row_index)
+                del self.data_rows[row_index]
+                self.endRemoveRows()
+                return True
+                
+            except Exception as e:
+                print(f"Error al eliminar la fila: {str(e)}")
+                if self.production_data.connection:
+                    self.production_data.disconnect()
+                return False
         return False
 
 

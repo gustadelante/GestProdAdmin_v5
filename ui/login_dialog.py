@@ -7,14 +7,23 @@ Módulo del diálogo de inicio de sesión
 Contiene la implementación del diálogo de inicio de sesión.
 """
 
+import os
+import sys
+import logging
+from PySide6.QtCore import Qt, Signal, Slot
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
     QPushButton, QMessageBox, QFrame
 )
-from PySide6.QtCore import Qt, Signal, Slot
 from PySide6.QtGui import QIcon
 
+# Añadir el directorio raíz al path para importar los módulos
+root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if root_dir not in sys.path:
+    sys.path.append(root_dir)
+
 from database.connection import DatabaseConnection
+from database.production_models import ProductionData
 from security.auth import AuthManager
 
 
@@ -34,6 +43,13 @@ class LoginDialog(QDialog):
         self.setMinimumWidth(400)
         self.setWindowFlags(Qt.Dialog | Qt.CustomizeWindowHint | Qt.WindowTitleHint)
         self.setModal(True)
+        
+        # Centrar la ventana en la pantalla
+        screen_geometry = self.screen().availableGeometry()
+        size = self.sizeHint()
+        x = (screen_geometry.width() - size.width()) // 2
+        y = (screen_geometry.height() - size.height()) // 2
+        self.move(x, y)
         
         # Obtener la configuración del padre si existe
         self.settings = parent.settings if parent else None
@@ -165,6 +181,50 @@ class LoginDialog(QDialog):
             # Pasar el gestor de autenticación al padre si existe
             if self.parent():
                 self.parent().set_auth_manager(self.auth_manager)
+            
+            # Actualizar campos vacíos según las reglas
+            try:
+                # Obtener la ruta de la base de datos de producción
+                db_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                from database.db_helper import get_db_path
+                db_path = get_db_path()
+                
+                logging.info(f"Intentando acceder a la base de datos en: {db_path}")
+                
+                # Verificar si el archivo existe
+                if not os.path.exists(db_path):
+                    logging.error(f"El archivo de base de datos no existe en: {db_path}")
+                    # Intentar con mayúsculas (para Windows)
+                    # No necesitamos buscar con mayúsculas ahora, el helper se encarga de la búsqueda
+                    pass
+                    if not os.path.exists(db_path):
+                        logging.error(f"El archivo de base de datos tampoco existe en: {db_path}")
+                        raise FileNotFoundError(f"No se encontró el archivo de base de datos en {db_path}")
+                
+                # Crear instancia de ProductionData
+                self.production_data = ProductionData(db_path)
+                
+                # Conectar y actualizar campos vacíos
+                if self.production_data.connect():
+                    try:
+                        # Actualizar campos vacíos
+                        self.production_data.update_empty_bobinas_fields()
+                        
+                        # Si estamos en el widget de producción, forzar recarga de datos
+                        if hasattr(self.parent(), 'production_widget'):
+                            production_widget = self.parent().production_widget
+                            if hasattr(production_widget, 'table_selector') and hasattr(production_widget, 'table_model'):
+                                current_table = production_widget.table_selector.currentText()
+                                if current_table:
+                                    production_widget.table_model.load_data(current_table)
+                    except Exception as e:
+                        logging.error(f"Error al actualizar campos vacíos: {str(e)}", exc_info=True)
+                    finally:
+                        self.production_data.disconnect()
+                else:
+                    logging.error("No se pudo conectar a la base de datos")
+            except Exception as e:
+                logging.error(f"Error al actualizar campos vacíos después del inicio de sesión: {str(e)}", exc_info=True)
             
             # Cerrar el diálogo con éxito
             self.accept()

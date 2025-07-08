@@ -41,17 +41,50 @@ CLEAR_ICON = """
 </svg>
 """
 
-def svg_to_icon(svg_content, color="white"):
+# Icono de copiar (copy)
+COPY_ICON = """
+<svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 0 24 24" width="24">
+    <circle cx="12" cy="12" r="12" fill="#2196F3"/>
+    <path d="M0 0h24v24H0z" fill="none"/>
+    <path d="M16 8h-4v8h6v-6l-2-2zm-1 0v2h2v-2h-2z" fill="white"/>
+    <path d="M12 6H8v8h2v-6h2V6z" fill="white"/>
+    <path d="M10 9h2v1h-2z" fill="white"/>
+    <path d="M10 11h2v1h-2z" fill="white"/>
+    <path d="M13 11h2v1h-2z" fill="white"/>
+    <path d="M13 13h2v1h-2z" fill="white"/>
+</svg>
+"""
+
+
+
+
+from PySide6.QtSvg import QSvgRenderer
+from PySide6.QtGui import QIcon, QPixmap, QPainter
+from PySide6.QtCore import QByteArray, Qt
+
+def svg_to_icon(svg_content, color="white", size=24):
     """
-    Convierte un SVG a un formato que puede ser utilizado como icono en PySide6
-    
+    Convierte un SVG a un formato que puede ser utilizado como icono en PySide6.
     Args:
         svg_content (str): Contenido SVG
-        color (str): Color del icono (por defecto blanco para mejor contraste en botones)
-        
+        color (str): Color opcional para reemplazar el color base del SVG
+        size (int): Tamaño del icono en píxeles
     Returns:
-        str: SVG modificado para usar como icono
+        QIcon: Icono generado a partir del SVG
     """
+    # Reemplazar el color si es necesario
+    if color and color != "white":
+        svg_content = svg_content.replace("#fff", color).replace("#ffffff", color)
+    svg_bytes = QByteArray(svg_content.encode("utf-8"))
+    renderer = QSvgRenderer(svg_bytes)
+    pixmap = QPixmap(size, size)
+    pixmap.fill(Qt.transparent)
+    painter = QPainter(pixmap)
+    renderer.render(painter)
+    painter.end()
+    return QIcon(pixmap)
+
+def svg_to_icon_with_color(svg_content, color):
     # Reemplazar el color de relleno en todos los paths excepto los que tienen fill="none"
     svg_with_color = svg_content.replace('<path d="M0 0h24v24H0z" fill="none"/>', 
                                         '<path d="M0 0h24v24H0z" fill="none"/>')

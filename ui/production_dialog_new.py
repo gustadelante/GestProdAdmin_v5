@@ -156,14 +156,39 @@ class ProductionRecordDialog(QDialog):
             elif "fecha" in col_name_lower:
                 widget = QDateEdit()
                 widget.setCalendarPopup(True)
-                widget.setDate(QDate.currentDate())
+                
+                # Obtener fecha actual
+                current_date = QDate.currentDate()
+                
+                # Establecer valor por defecto según el campo
+                if "fechavalidezlote" in col_name_lower:
+                    # Para fechaValidezLote: fecha actual + 5 años
+                    default_date = current_date.addYears(5)
+                    widget.setDate(default_date)
+                    widget.setDisplayFormat("dd/MM/yyyy")
+                else:
+                    # Para otros campos de fecha (fechaElaboración, etc.): fecha actual
+                    widget.setDate(current_date)
+                    widget.setDisplayFormat("dd/MM/yyyy")
+                
+                # Si hay un valor existente, usarlo (útil en modo edición o copia)
                 if row_data and col_idx < len(row_data) and row_data[col_idx]:
                     try:
-                        date_parts = row_data[col_idx].split("-")
-                        if len(date_parts) == 3:
-                            widget.setDate(QDate(int(date_parts[0]), int(date_parts[1]), int(date_parts[2])))
-                    except:
-                        pass
+                        # Intentar parsear la fecha en formato YYYY-MM-DD
+                        date_str = str(row_data[col_idx])
+                        if date_str:
+                            if "-" in date_str:
+                                date_parts = date_str.split("-")
+                                if len(date_parts) == 3:
+                                    widget.setDate(QDate(int(date_parts[0]), int(date_parts[1]), int(date_parts[2])))
+                            elif "/" in date_str:
+                                # Si el formato no es válido, intentar con formato DD/MM/YYYY
+                                date_parts = date_str.split("/")
+                                if len(date_parts) == 3:
+                                    widget.setDate(QDate(int(date_parts[2]), int(date_parts[1]), int(date_parts[0])))
+                    except Exception as e:
+                        logging.warning(f"Error al analizar la fecha {row_data[col_idx]}: {e}")
+                        # Mantener el valor por defecto si hay un error
             elif ("peso" in col_name_lower or "gramaje" in col_name_lower or 
                   "diametro" in col_name_lower or "ancho" in col_name_lower):
                 widget = QDoubleSpinBox()

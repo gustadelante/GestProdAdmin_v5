@@ -11,7 +11,7 @@ from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QFormLayout, QLineEdit,
     QDialogButtonBox, QLabel, QComboBox, QDateEdit,
     QSpinBox, QDoubleSpinBox, QMessageBox, QDateTimeEdit,
-    QWidget, QScrollArea
+    QWidget
 )
 from PySide6.QtCore import Qt, QDate, QDateTime
 import json
@@ -90,18 +90,12 @@ class ProductionRecordDialog(QDialog):
         print(f"[DEBUG] init_ui - row_data: {row_data}")
         print(f"[DEBUG] init_ui - column_names: {self.column_names}")
         
-        # Layout principal
+        # Layout principal - diseño lo más básico posible
         main_layout = QVBoxLayout(self)
         
-        # Crear un área de desplazamiento
-        scroll_area = QScrollArea()
-        scroll_area.setWidgetResizable(True)
-        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        
-        # Widget para contener el formulario
-        form_widget = QWidget()
-        form_layout = QFormLayout(form_widget)
+        # Formulario simple 
+        form_layout = QFormLayout()
+        main_layout.addLayout(form_layout)
         
         # Crear widgets para cada campo
         for col_idx, col_name in enumerate(self.column_names):
@@ -125,6 +119,8 @@ class ProductionRecordDialog(QDialog):
                     else:
                         print("[DEBUG] No se encontró el código de producto en la lista")
                 self.codprod_combo = widget
+                # Conectar la señal de cambio de selección para actualizar el peso
+                widget.currentIndexChanged.connect(self.update_peso_from_codprod)
                 
             elif col_name_lower == "descprod":
                 widget = QLineEdit()
@@ -170,113 +166,69 @@ class ProductionRecordDialog(QDialog):
                 if row_data and col_idx < len(row_data):
                     widget.setText(str(row_data[col_idx]) if row_data[col_idx] is not None else "")
             
-            elif col_name_lower == "fecha_validez_lote":
-                widget = QDateEdit()
+            elif col_name_lower == "fecha":
+                widget = QDateTimeEdit()
                 widget.setCalendarPopup(True)
-                widget.setDisplayFormat("dd/MM/yyyy")
-                
-                # Set default date to current date + 5 years for expiration date
-                default_date = QDate.currentDate().addYears(5)
-                widget.setDate(default_date)
-                
-                # If editing existing record, try to parse the date
+                widget.setDisplayFormat("dd/MM/yyyy HH:mm")
                 if row_data and col_idx < len(row_data) and row_data[col_idx]:
-                    date_value = str(row_data[col_idx]).strip()
-                    if date_value:
-                        parsed = False
-                        # Try YYYY-MM-DD format
-                        if '-' in date_value:
-                            date_parts = date_value.split("-")
-                            if len(date_parts) == 3:
-                                try:
-                                    year, month, day = map(int, date_parts)
-                                    widget.setDate(QDate(year, month, day))
-                                    parsed = True
-                                except Exception:
-                                    pass
-                        # Try DD/MM/YYYY format if first attempt failed
-                        if not parsed and '/' in date_value:
-                            date_parts = date_value.split("/")
-                            if len(date_parts) == 3:
-                                try:
-                                    day, month, year = map(int, date_parts)
-                                    widget.setDate(QDate(year, month, day))
-                                except Exception:
-                                    pass
-                
-                self.field_widgets[col_idx] = widget
-                form_layout.addRow(QLabel(col_name), widget)
-                continue
+                    print(f"[DEBUG] Procesando campo fecha: {row_data[col_idx]}")
+                    try:
+                        date_str = str(row_data[col_idx])
+                        if ' ' in date_str and ':' in date_str:
+                            date = QDateTime.fromString(date_str, "yyyy-MM-dd HH:mm")
+                        else:
+                            date = QDateTime.fromString(date_str, "yyyy-MM-dd")
+                        
+                        if date.isValid():
+                            widget.setDateTime(date)
+                            print(f"[DEBUG] Fecha establecida: {date.toString('dd/MM/yyyy HH:mm')}")
+                        else:
+                            widget.setDateTime(QDateTime.currentDateTime())
+                    except Exception as e:
+                        print(f"[DEBUG] Error al analizar la fecha {row_data[col_idx]}: {e}")
+                        widget.setDateTime(QDateTime.currentDateTime())
+                else:
+                    widget.setDateTime(QDateTime.currentDateTime())
             
-            elif col_name_lower in ["fecha", "created_at"]:
+            elif "fecha" in col_name_lower and col_name_lower != "fecha":
                 widget = QDateEdit()
                 widget.setCalendarPopup(True)
                 widget.setDisplayFormat("dd/MM/yyyy")
                 
+                # Solo establecer fecha si estamos editando un registro existente
                 if row_data and col_idx < len(row_data) and row_data[col_idx]:
                     try:
-                        date_str = str(row_data[col_idx]).strip()
-                        if not date_str:
-                            widget.setDate(QDate.currentDate())
-                            continue
-                            
-                        # Si la fecha ya está en formato dd/MM/yyyy, usarla directamente
-                        if len(date_str) == 10 and date_str[2] == '/' and date_str[5] == '/':
-                            day, month, year = map(int, date_str.split('/'))
-                            widget.setDate(QDate(year, month, day))
-                            continue
-                            
+                        date_str = str(row_data[col_idx])
                         # Intentar diferentes formatos de fecha
-                        for fmt in ["yyyy-MM-dd HH:mm:ss", "yyyy-MM-dd", "dd/MM/yyyy"]:
+                        for fmt in ["yyyy-MM-dd", "dd/MM/yyyy", "yyyy/MM/dd", "dd-MM-yyyy"]:
                             date = QDate.fromString(date_str, fmt)
                             if date.isValid():
                                 widget.setDate(date)
                                 break
                         else:
-                            # Si no se pudo parsear, usar fecha actual
-                            widget.setDate(QDate.currentDate())
+                            # Si no se pudo analizar, dejar en blanco
+                            widget.setDate(QDate())
                     except Exception as e:
-                        print(f"[DEBUG] Error al analizar la fecha {row_data[col_idx]}: {e}")
-                        widget.setDate(QDate.currentDate())
+                        print(f"Error al analizar la fecha {date_str}: {e}")
+                        widget.setDate(QDate())  # Fecha inválida = campo vacío
                 else:
-                    # Si no hay valor, usar la fecha actual
-                    widget.setDate(QDate.currentDate())
-                
-                # Asegurarse de que el widget se muestre correctamente
-                widget.setStyleSheet("""
-                    QDateEdit {
-                        padding: 5px;
-                        min-width: 100px;
-                    }
-                """)
+                    # Para nuevos registros, dejar el campo vacío
+                    widget.setDate(QDate())  # Fecha inválida = campo vacío
             
-            elif "fecha" in col_name_lower and col_name_lower not in ["fecha", "created_at"]:
-                widget = QDateEdit()
-                widget.setCalendarPopup(True)
-                widget.setDisplayFormat("dd/MM/yyyy")
-                
-                if row_data and col_idx < len(row_data) and row_data[col_idx]:
+            elif col_name_lower == "cantidadenprimeraudm":
+                widget = QLineEdit()
+                widget.setReadOnly(True)  # Hacer el campo de solo lectura
+                if row_data and col_idx < len(row_data) and row_data[col_idx] is not None:
                     try:
-                        date_str = str(row_data[col_idx]).strip()
-                        if not date_str:
-                            widget.setDate(QDate.currentDate())
-                            continue
-                            
-                        # Intentar diferentes formatos de fecha
-                        for fmt in ["yyyy-MM-dd HH:mm:ss", "yyyy-MM-dd", "dd/MM/yyyy"]:
-                            date = QDate.fromString(date_str, fmt)
-                            if date.isValid():
-                                widget.setDate(date)
-                                break
-                        else:
-                            # Si no se pudo parsear, usar fecha actual
-                            widget.setDate(QDate.currentDate())
-                    except Exception as e:
-                        print(f"[DEBUG] Error al analizar la fecha {row_data[col_idx]}: {e}")
-                        widget.setDate(QDate.currentDate())
+                        # Formatear el valor a 2 decimales con coma como separador decimal
+                        valor = float(row_data[col_idx])
+                        widget.setText(f"{valor:.2f}".replace('.', ','))
+                    except (ValueError, TypeError):
+                        widget.setText("0,00")
                 else:
-                    widget.setDate(QDate.currentDate())
-            
+                    widget.setText("0,00")
+                self.cantidad_primera_udm_widget = widget
+                
             elif col_name_lower in ["peso", "gramaje", "diametro", "ancho"]:
                 widget = QDoubleSpinBox()
                 widget.setRange(0, 9999.99)
@@ -330,11 +282,7 @@ class ProductionRecordDialog(QDialog):
                 form_layout.addRow(f"{col_name}:", widget)
                 print(f"[DEBUG] Campo agregado al formulario: {col_name}")
         
-        # Configurar el scroll area con el formulario
-        scroll_area.setWidget(form_widget)
-        main_layout.addWidget(scroll_area, 1)  # El 1 hace que el scroll area tome todo el espacio disponible
-        
-        # Agregar botones al final (fuera del scroll area)
+        # Agregar botones
         button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         button_box.accepted.connect(self.validate_and_accept)
         button_box.rejected.connect(self.reject)
@@ -347,23 +295,57 @@ class ProductionRecordDialog(QDialog):
         # Validaciones básicas si son necesarias
         self.accept()
     
+    def update_peso_from_codprod(self, index):
+        """
+        Actualiza el campo CantidadEnPrimeraUdM con el peso del producto seleccionado
+        Siempre actualiza el campo, incluso si ya tiene un valor
+        """
+        if not hasattr(self, 'cantidad_primera_udm_widget') or not hasattr(self, 'codprod_combo'):
+            return
+            
+        # Obtener el código de producto seleccionado
+        codigo = self.codprod_combo.currentData()
+        if not codigo:
+            # Si no hay código seleccionado, establecer valor por defecto
+            self.cantidad_primera_udm_widget.setText("0,00")
+            return
+            
+        # Buscar el producto en la lista
+        for producto in self.combo_data['Productos']:
+            if producto.get('codigo') == codigo:
+                # Obtener el peso del producto (asumiendo que está en el campo 'peso')
+                peso = producto.get('peso', 0)
+                try:
+                    # Convertir a float para manejar diferentes formatos de entrada
+                    peso_float = float(peso)
+                    # Formatear a 2 decimales con coma como separador decimal
+                    peso_formateado = f"{peso_float:.2f}".replace('.', ',')
+                    # Actualizar el campo CantidadEnPrimeraUdM
+                    self.cantidad_primera_udm_widget.setText(peso_formateado)
+                except (ValueError, TypeError):
+                    # En caso de error, establecer valor por defecto
+                    self.cantidad_primera_udm_widget.setText("0,00")
+                return
+        
+        # Si no se encontró el producto, establecer valor por defecto
+        self.cantidad_primera_udm_widget.setText("0,00")
+    
     def get_row_data(self):
         """
         Obtiene los datos del formulario
         
         Returns:
-            list: Lista con los valores de los campos en el orden de las columnas
+            list: Lista con los valores de los campos
         """
-        # Inicializar con None para todas las columnas
-        row_data = [None] * len(self.column_names)
+        row_data = []
         
         for col_idx, col_name in enumerate(self.column_names):
             widget = self.field_widgets.get(col_idx)
-            if not widget:
-                continue
-                
             col_name_lower = col_name.lower()
-            value = None
+            
+            if not widget:
+                row_data.append(None)
+                continue
             
             # Obtener el valor según el tipo de widget
             if col_name_lower == "codprod" and hasattr(self, 'codprod_combo'):
@@ -372,13 +354,10 @@ class ProductionRecordDialog(QDialog):
                 codigo = self.codprod_combo.currentData() if hasattr(self, 'codprod_combo') else ""
                 nombre = self.codprod_to_nombre.get(codigo, "")
                 value = nombre.upper()
-            elif isinstance(widget, QDateEdit):
-                # Para todos los campos de fecha (incluyendo fecha, created_at, etc.)
-                # Usar el formato dd/MM/yyyy para guardar
-                value = widget.date().toString("dd/MM/yyyy")
             elif isinstance(widget, QDateTimeEdit):
-                # Por si acaso hay algún campo de fecha/hora que necesite manejarse de otra manera
-                value = widget.dateTime().toString("dd/MM/yyyy HH:mm")
+                value = widget.dateTime().toString("yyyy-MM-dd HH:mm")
+            elif isinstance(widget, QDateEdit):
+                value = widget.date().toString("yyyy-MM-dd")
             elif isinstance(widget, QDoubleSpinBox):
                 value = widget.value()
             elif isinstance(widget, QSpinBox):
@@ -395,8 +374,6 @@ class ProductionRecordDialog(QDialog):
             else:  # QLineEdit
                 value = widget.text()
             
-            # Asignar el valor en la posición correcta
-            if col_idx < len(row_data):
-                row_data[col_idx] = value
+            row_data.append(value)
         
         return row_data

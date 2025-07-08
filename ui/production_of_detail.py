@@ -10,7 +10,8 @@ Contiene la implementación de la vista detallada de órdenes de fabricación.
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame, 
     QComboBox, QTableWidget, QTableWidgetItem, QHeaderView,
-    QSizePolicy, QSpacerItem, QPushButton, QMessageBox, QGridLayout
+    QSizePolicy, QSpacerItem, QPushButton, QMessageBox, QGridLayout,
+    QScrollArea
 )
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont
@@ -31,7 +32,8 @@ class ProductionOFDetailWidget(QWidget):
             parent (QWidget, optional): Widget padre
         """
         super().__init__(parent)
-        self.db_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'produccion.db')
+        from database.db_helper import get_db_path
+        self.db_path = get_db_path()
         self.production_data = ProductionData(self.db_path)
         self.current_of = ""
         self.of_list = []
@@ -65,6 +67,13 @@ class ProductionOFDetailWidget(QWidget):
         self.btn_next = QPushButton("Siguiente")
         self.btn_next.clicked.connect(self.go_to_next_of)
         header_layout.addWidget(self.btn_next)
+        
+        # Botón de exportación
+        self.btn_export = QPushButton("Exportar datos")
+        self.btn_export.setToolTip("Exportar datos de la OF seleccionada a un archivo TXT")
+        self.btn_export.clicked.connect(self.export_data)
+        self.btn_export.setEnabled(False)  # Deshabilitado hasta que se seleccione una OF
+        header_layout.addWidget(self.btn_export)
         
         # Espaciador para empujar todo a la izquierda
         header_layout.addItem(QSpacerItem(40, 20, QSizePolicy.Expanding, QSizePolicy.Minimum))
@@ -378,4 +387,68 @@ class ProductionOFDetailWidget(QWidget):
         """Actualiza el estado de los botones de navegación"""
         current_index = self.of_selector.currentIndex()
         self.btn_prev.setEnabled(current_index > 0)
+        self.btn_export.setEnabled(self.of_selector.count() > 0 and current_index >= 0)
         self.btn_next.setEnabled(current_index < self.of_selector.count() - 1)
+    
+    def export_data(self):
+        """Exporta los datos de la OF seleccionada a un archivo de texto"""
+        if not self.current_of:
+            QMessageBox.warning(
+                self, 
+                "Exportación", 
+                "Seleccione una Orden de Fabricación para exportar"
+            )
+            return
+        
+        try:
+            # Conectar a la base de datos
+            if not self.production_data.connect():
+                QMessageBox.critical(
+                    self, 
+                    "Error de conexión", 
+                    "No se pudo conectar a la base de datos de producción."
+                )
+                return
+            
+            # Obtener las tablas disponibles
+            tables = self.production_data.get_table_names()
+            
+            # Buscar la tabla 'bobina' o usar la primera disponible
+            table_name = "bobina" if "bobina" in tables else tables[0] if tables else ""
+            
+            if not table_name:
+                self.production_data.disconnect()
+                return
+            
+            # Consultar los datos de la OF seleccionada
+            self.cursor = self.production_data.connection.cursor()
+            query = f"SELECT * FROM {table_name} WHERE OF = ? ORDER BY sec, bobina_num"
+            self.cursor.execute(query, (self.current_of,))
+            rows = self.cursor.fetchall()
+            
+            # Obtener los nombres de las columnas
+            schema = self.production_data.get_table_schema(table_name)
+            columns = [col[1] for col in schema]
+            
+            # Convertir las filas a una lista de diccionarios para facilitar el manejo
+            data = []
+            for row in rows:
+                record = {}
+                for i, col in enumerate(columns):
+                    record[col.lower()] = row[i]  # Usar claves en minúsculas
+                data.append(record)
+            
+            # Llamar al exportador para guardar los datos
+            from services.export_manager import ProductionExporter
+            ProductionExporter.export_to_txt(self, self.current_of, data, self.production_data.connection)
+            
+            self.production_data.disconnect()
+            
+        except Exception as e:
+            QMessageBox.critical(
+                self, 
+                "Error", 
+                f"Error al exportar los datos: {str(e)}"
+            )
+            if self.production_data.connection:
+                self.production_data.disconnect()
