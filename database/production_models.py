@@ -197,9 +197,18 @@ class ProductionData:
             set_clause = ', '.join([f"{col} = ?" for col in columns])
             where_clause = ' AND '.join([f"{field} = ?" for field in where_fields])
             query = f"UPDATE {table_name} SET {set_clause} WHERE {where_clause}"
-            
+
+            logging.info(f"Ejecutando UPDATE: {query}")
+            logging.info(f"Valores SET: {formatted_row_data}")
+            logging.info(f"Valores WHERE: {formatted_where_values}")
+
             self.cursor.execute(query, formatted_row_data + formatted_where_values)
             self.connection.commit()
+            affected = self.cursor.rowcount
+            logging.info(f"Filas afectadas: {affected}")
+            if affected == 0:
+                logging.warning(f"No se actualizó ninguna fila para la clave: {where_fields} = {where_values}")
+                return False
             return True
         except sqlite3.Error as e:
             logging.error(f"Error al actualizar fila: {str(e)}")
@@ -351,159 +360,50 @@ class ProductionData:
     def update_empty_bobinas_fields(self) -> bool:
         """
         Actualiza los campos vacíos en la tabla bobina según las reglas especificadas.
-        - Actualiza el campo codigodeproducto con la concatenación de varios campos
+        - Actualiza el campo codigoDeProducto con la concatenación de varios campos
         - Actualiza el campo lote con el formato 'of/sec' si está vacío
         - Actualiza el campo nroOT con el valor de 'of' si está vacío
-        """
-        try:
-            # Verificar si la tabla bobina existe
-            self.cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND (name='bobina' OR name='bobinas')")
-            table_info = self.cursor.fetchone()
-            
-            if not table_info:
-                logging.warning("No se encontró la tabla 'bobina' ni 'bobinas' en la base de datos")
-                return False
-                
-            table_name = table_info[0]  # Usar el nombre real de la tabla
-            
-            # Verificar las columnas existentes en la tabla
-            self.cursor.execute(f"PRAGMA table_info({table_name})")
-            columnas = [col[1] for col in self.cursor.fetchall()]
-            
-            # Verificar si existen las columnas necesarias
-            required_columns = ['of', 'sec', 'lote', 'nroOT', 'peso', 'CantidadEnPrimeraUdM']
-            missing_columns = [col for col in required_columns if col not in columnas]
-            
-            if missing_columns:
-                logging.warning(f"Faltan columnas requeridas en la tabla {table_name}")
-                logging.warning(f"Columnas faltantes: {missing_columns}")
-                logging.warning(f"Columnas encontradas: {columnas}")
-                return False
-            
-            # Obtener todos los registros de la tabla bobina que necesitan actualización
-            # Incluimos peso en la consulta para actualizar CantidadEnPrimeraUdM
-            query = f"""
-                SELECT rowid, alistamiento, codprod, calidad, obs, gramaje, diametro, ancho, of, sec, lote, nroOT, peso
-                FROM {table_name}
-                WHERE lote IS NULL OR lote = '' OR nroOT IS NULL OR nroOT = '' 
-                   OR codigodeproducto IS NULL OR codigodeproducto = ''
-                   OR peso IS NOT NULL
-            """
-            self.cursor.execute(query)
-            rows = self.cursor.fetchall()
-            
-            if not rows:
-                logging.info(f"No se encontraron registros que necesiten actualización en {table_name}")
-                return True
-                
-            updated_count = 0
-            
-            for row in rows:
-                try:
-                    # Asegurarse de que la tupla tenga la longitud esperada
-                    if len(row) < 13:  # Verificar que tenemos todos los campos esperados
-                        logging.warning(f"Fila con formato inesperado: {row}")
-                        continue
-                        
-                    rowid = row[0]
-                    alistamiento = row[1]
-                    codprod = row[2]
-                    calidad = row[3]
-                    obs = row[4]
-                    gramaje = row[5]
-                    diametro = row[6]
-                    ancho = row[7]
-                    of = row[8]
-                    sec = row[9]
-                    lote_actual = row[10]
-                    nro_ot_actual = row[11]
-                    peso = row[12]
-                    
-                    # Convertir a string y limpiar los valores
-                    alistamiento = str(alistamiento or '').strip()
-                    codprod = str(codprod or '').strip()
-                    calidad = str(calidad or '').strip()
-                    obs = str(obs or '').strip()
-                    
-                    # Formatear los valores numéricos
-                    gramaje_fmt = self._format_gramaje(gramaje)
-                    diametro_fmt = self._format_diametro(diametro)
-                    ancho_fmt = self._format_ancho(ancho)
-                    
-                    # Construir el código de producto
                     nuevo_codigo = (
                         f"{alistamiento}{codprod}{calidad}{obs}"
                         f"{gramaje_fmt}{diametro_fmt}{ancho_fmt}"
                     )
-                    
-                    # Inicializar listas para la construcción dinámica de la consulta
-                    updates = ["codigodeproducto = ?"]
-                    params = [nuevo_codigo]
-                    
-                    # Actualizar CantidadEnPrimeraUdM con el valor de peso formateado a 2 decimales
-                    if peso is not None:
-                        try:
-                            # Convertir a float y formatear a 2 decimales con coma como separador decimal
-                            peso_float = float(peso)
-                            peso_formateado = f"{peso_float:.2f}".replace('.', ',')
-                            updates.append("CantidadEnPrimeraUdM = ?")
-                            params.append(peso_formateado)
-                        except (ValueError, TypeError):
-                            # En caso de error, establecer valor por defecto
-                            updates.append("CantidadEnPrimeraUdM = ?")
-                            params.append("0,00")
-                    
-                    # Función auxiliar para verificar si un valor está vacío o es None
-                    def is_empty(value):
-                        return value is None or (isinstance(value, str) and value.strip() == '')
-                    
-                    # Actualizar el lote si está vacío o es NULL y tenemos of y sec
-                    if is_empty(lote_actual) and of is not None and sec is not None:
-                        nuevo_lote = f"{of}/{sec}"
-                        updates.append("lote = ?")
-                        params.append(nuevo_lote)
-                    
-                    # Actualizar nroOT si está vacío o es NULL y tenemos of
-                    if is_empty(nro_ot_actual) and of is not None:
-                        nro_ot_valor = str(of)
-                        updates.append("nroOT = ?")
-                        params.append(nro_ot_valor)
-                    
-                    # Si solo hay el código de producto para actualizar, verificar si es necesario
-                    if len(updates) > 1 or is_empty(nuevo_codigo):
-                        # Construir y ejecutar la consulta de actualización
-                        update_query = f"UPDATE {table_name} SET {', '.join(updates)} WHERE rowid = ?"
-                        params.append(rowid)
-                        self.cursor.execute(update_query, params)
-                        updated_count += 1
-                        
-                        # Hacer commit después de cada actualización para asegurar
-                        self.connection.commit()
-                        
-                except Exception as e:
-                    logging.error(f"Error al procesar el registro {rowid}: {str(e)}")
-                    self.connection.rollback()
-            
-            logging.info(f"Se actualizaron {updated_count} registros en la tabla {table_name}")
-            return True
-            
-        except sqlite3.Error as e:
-            logging.error(f"Error al actualizar campos vacíos: {str(e)}")
-            if self.connection:
-                self.connection.rollback()
-            return False
-                
-    def check_quality_fields_status(self) -> dict:
-        """
-        Verifica el estado de los campos de calidad en la base de datos.
-        
-        Returns:
-            dict: Diccionario con estadísticas sobre los campos de calidad
+                    updates.append("codigoDeProducto = ?")
+                    params.append(nuevo_codigo)
+
+                # Actualizar CantidadEnPrimeraUdM con el valor de peso formateado a 2 decimales
+                if peso is not None:
+                    try:
+                        peso_float = float(peso)
+                        peso_formateado = f"{peso_float:.2f}".replace('.', ',')
+                        updates.append("CantidadEnPrimeraUdM = ?")
+                        params.append(peso_formateado)
+                    except (ValueError, TypeError):
+                        updates.append("CantidadEnPrimeraUdM = ?")
+                        params.append("0,00")
+
+                # Actualizar el lote si está vacío o es NULL y tenemos of y sec
+                if is_empty(lote_actual) and of is not None and sec is not None:
+                    nuevo_lote = f"{of}/{sec}"
+                    updates.append("lote = ?")
+                    params.append(nuevo_lote)
+
+                # Actualizar nroOT si está vacío o es NULL y tenemos of
+                if is_empty(nro_ot_actual) and of is not None:
+                    nro_ot_valor = str(of)
+                    updates.append("nroOT = ?")
+                    params.append(nro_ot_valor)
+
+                # Si hay algún campo a actualizar, ejecutar UPDATE
+                if len(updates) > 0:
+                    update_query = f"UPDATE {table_name} SET {', '.join(updates)} WHERE rowid = ?"
+                    params.append(rowid)
+                    self.cursor.execute(update_query, params)
+                    updated_count += 1
         """
         if not self.connection:
             if not self.connect():
                 logging.error("No se pudo establecer conexión a la base de datos")
-                return {}
+                return False
                 
         try:
             # Verificar si la tabla bobina existe (case-insensitive)
@@ -515,7 +415,7 @@ class ProductionData:
                 self.cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
                 tables = [t[0] for t in self.cursor.fetchall()]
                 logging.error(f"No se encontró la tabla 'bobina' en la base de datos. Tablas disponibles: {', '.join(tables)}")
-                return {}
+                return False
                 
             table_name = table_info[0]  # Usar el nombre real de la tabla
             logging.info(f"Verificando campos de calidad en tabla: {table_name}")
@@ -568,12 +468,110 @@ class ProductionData:
             else:
                 logging.info("No se encontraron registros con campos de calidad vacíos")
             
-            return stats
-            
-        except Exception as e:
-            logging.error(f"Error al verificar el estado de los campos de calidad: {str(e)}", exc_info=True)
-            return {}
-    
+            # Primero, actualizar calidad y obs si existe el método
+            if hasattr(self, 'update_quality_fields'):
+                logging.info("Actualizando primero calidad y obs antes de calcular codigoDeProducto...")
+                self.update_quality_fields()
+
+            # Obtener todos los registros con codigoDeProducto vacío
+            query = f"""
+                SELECT rowid, alistamiento, codprod, calidad, obs, gramaje, diametro, ancho, of, sec, lote, nroOT, peso, codigoDeProducto
+                FROM {table_name}
+                WHERE codigoDeProducto IS NULL OR codigoDeProducto = ''
+            """
+            self.cursor.execute(query)
+            rows = self.cursor.fetchall()
+
+            logging.info(f"Registros detectados con codigoDeProducto vacío: {len(rows)}")
+            if not rows:
+                logging.info(f"No se encontraron registros que necesiten actualización en {table_name}")
+                return True
+
+            updated_count = 0
+            def is_empty(value):
+                return value is None or (isinstance(value, str) and value.strip() == '')
+            for row in rows:
+                try:
+                    if len(row) < 14:
+                        logging.warning(f"Fila con formato inesperado: {row}")
+                        continue
+
+                    rowid = row[0]
+                    alistamiento = str(row[1] or '').strip()
+                    codprod = str(row[2] or '').strip()
+                    calidad = str(row[3] or '').strip()
+                    obs = str(row[4] or '').strip()
+                    gramaje = row[5]
+                    diametro = row[6]
+                    ancho = row[7]
+                    of = row[8]
+                    sec = row[9]
+                    lote_actual = row[10]
+                    nro_ot_actual = row[11]
+                    peso = row[12]
+                    codigoDeProducto_actual = row[13]
+
+                    # Formatear los valores numéricos
+                    gramaje_fmt = self._format_gramaje(gramaje)
+                    diametro_fmt = self._format_diametro(diametro)
+                    ancho_fmt = self._format_ancho(ancho)
+
+                    updates = []
+                    params = []
+
+                    # Solo actualizar codigoDeProducto si está vacío
+                    if is_empty(codigoDeProducto_actual):
+                        nuevo_codigo = (
+                            f"{alistamiento}{codprod}{calidad}{obs}"
+                            f"{gramaje_fmt}{diametro_fmt}{ancho_fmt}"
+                        )
+                        updates.append("codigoDeProducto = ?")
+                        params.append(nuevo_codigo)
+
+                    # Actualizar CantidadEnPrimeraUdM con el valor de peso formateado a 2 decimales
+                    if peso is not None:
+                        try:
+                            peso_float = float(peso)
+                            peso_formateado = f"{peso_float:.2f}".replace('.', ',')
+                            updates.append("CantidadEnPrimeraUdM = ?")
+                            params.append(peso_formateado)
+                        except (ValueError, TypeError):
+                            updates.append("CantidadEnPrimeraUdM = ?")
+                            params.append("0,00")
+
+                    # Actualizar el lote si está vacío o es NULL y tenemos of y sec
+                    if is_empty(lote_actual) and of is not None and sec is not None:
+                        nuevo_lote = f"{of}/{sec}"
+                        updates.append("lote = ?")
+                        params.append(nuevo_lote)
+
+                    # Actualizar nroOT si está vacío o es NULL y tenemos of
+                    if is_empty(nro_ot_actual) and of is not None:
+                        nro_ot_valor = str(of)
+                        updates.append("nroOT = ?")
+                        params.append(nro_ot_valor)
+
+                    # Si hay algún campo a actualizar, ejecutar UPDATE
+                    if len(updates) > 0:
+                        update_query = f"UPDATE {table_name} SET {', '.join(updates)} WHERE rowid = ?"
+                        params.append(rowid)
+                        self.cursor.execute(update_query, params)
+                        updated_count += 1
+                        self.connection.commit()
+                        logging.info(f"Registro actualizado: {rowid}")
+                except Exception as e:
+                    logging.error(f"Error al procesar el registro {rowid}: {str(e)}")
+                    self.connection.rollback()
+
+            logging.info(f"Se actualizaron {updated_count} registros en la tabla {table_name}")
+            return True
+
+        except sqlite3.Error as e:
+            logging.error(f"Error al actualizar campos vacíos: {str(e)}")
+            if self.connection:
+                self.connection.rollback()
+            return False
+
     def get_table_columns(self, table_name: str) -> List[str]:
         """
         Obtiene la lista de columnas de una tabla
@@ -703,6 +701,18 @@ class ProductionData:
                     producto_str = str(producto).strip() if producto is not None else ''
                     fecha_elab_str = str(fecha_elab_actual).strip() if fecha_elab_actual is not None else ''
                     fecha_validez_str = str(fecha_validez_actual).strip() if fecha_validez_actual is not None else ''
+                    
+                    # NO sobreescribir calidad y obs si ya tienen valor
+                    calidad_actual = str(row[calidad_idx]).strip() if calidad_idx < len(row) else ''
+                    obs_actual = str(row[obs_idx]).strip() if obs_idx < len(row) else ''
+                    if calidad_actual:
+                        calidad = calidad_actual
+                    else:
+                        calidad = '01'
+                    if obs_actual:
+                        obs = obs_actual
+                    else:
+                        obs = '00'
                     
                     # Normalizar codprod quitando ceros a la izquierda
                     codprod_normalized = codprod_str.lstrip('0')

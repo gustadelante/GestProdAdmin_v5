@@ -50,8 +50,24 @@ class MainWindow(QMainWindow):
         # Asegurar que el menú siempre esté visible al iniciar
         self.settings.set_value('ui/menu_visible', True)
         
-        # Mostrar el diálogo de inicio de sesión al iniciar
-        QTimer.singleShot(100, self.show_login_dialog)
+        # --- INICIO: Acceso directo como admin/admin (login desactivado temporalmente) ---
+        from database.connection import DatabaseConnection
+        from security.auth import AuthManager
+        connection_string = self.settings.get_db_connection_string()
+        self.db_connection = DatabaseConnection(connection_string)
+        if self.db_connection.connect():
+            self.auth_manager = AuthManager(self.db_connection)
+            # Simula login como admin
+            if not self.auth_manager.authenticate('admin', 'admin'):
+                QMessageBox.critical(self, "Error", "No existe el usuario admin/admin en la base de datos.")
+            else:
+                self.update_menu_visibility()
+                self.showMaximized()
+                # Acceso directo a Producción > Control de Producción
+                self.change_page(2, "Control de Producción")
+        else:
+            QMessageBox.critical(self, "Error", "No se pudo conectar a la base de datos.")
+        # --- FIN: Acceso directo como admin/admin ---
     
     def init_ui(self):
         """Inicializa los componentes de la interfaz"""

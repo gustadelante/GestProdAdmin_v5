@@ -217,10 +217,80 @@ class ProductionControlWidget(QWidget):
         self.btn_delete_row.setObjectName("btnDeleteRow")
         self.btn_delete_row.clicked.connect(self.delete_selected_rows)
         crud_layout.addWidget(self.btn_delete_row)
-        
+
         filter_layout.addLayout(crud_layout)
         
         content_layout.addLayout(filter_layout)
+
+        # --- ComboBox de Calidad y Observaciones y botón Procesar ---
+        from ui.production_combo_data import load_combo_data
+        combo_data = load_combo_data()
+
+        calidad_obs_layout = QHBoxLayout()
+        calidad_obs_layout.setSpacing(10)
+        calidad_obs_layout.setContentsMargins(0, 0, 0, 0)
+
+        # Espacio flexible para empujar calidad y su combo a la derecha
+        calidad_obs_layout.addStretch(1)
+        label_calidad = QLabel("Calidad:")
+        label_calidad.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        calidad_obs_layout.addWidget(label_calidad)
+        self.combo_calidad = QComboBox()
+        self.combo_calidad.setObjectName("comboCalidad")
+        self.combo_calidad.setEditable(True)
+        self.combo_calidad.setInsertPolicy(QComboBox.NoInsert)
+        max_calidad_width = 0
+        for item in combo_data["Calidad"]:
+            text = f"{item['codigo']} - {item['nombre']}"
+            self.combo_calidad.addItem(text, item['codigo'])
+            width = self.combo_calidad.fontMetrics().boundingRect(text).width()
+            if width > max_calidad_width:
+                max_calidad_width = width
+        exact_calidad_width = max_calidad_width + 15
+        self.combo_calidad.setMinimumWidth(exact_calidad_width)
+        self.combo_calidad.setMaximumWidth(exact_calidad_width)
+        self.combo_calidad.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        calidad_obs_layout.addWidget(self.combo_calidad)
+
+        # Espacio pequeño entre combos
+        calidad_obs_layout.addSpacing(15)
+
+        label_obs = QLabel("Obs:")
+        label_obs.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        calidad_obs_layout.addWidget(label_obs)
+
+        self.combo_obs = QComboBox()
+        self.combo_obs.setObjectName("comboObs")
+        self.combo_obs.setEditable(True)
+        self.combo_obs.setInsertPolicy(QComboBox.NoInsert)
+        max_obs_width = 0
+        for item in combo_data["Observaciones"]:
+            text = f"{item['codigo']} - {item['nombre']}"
+            self.combo_obs.addItem(text, item['codigo'])
+            width = self.combo_obs.fontMetrics().boundingRect(text).width()
+            if width > max_obs_width:
+                max_obs_width = width
+        exact_obs_width = max_obs_width + 15
+        self.combo_obs.setMinimumWidth(exact_obs_width)
+        self.combo_obs.setMaximumWidth(exact_obs_width)
+        self.combo_obs.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        calidad_obs_layout.addWidget(self.combo_obs)
+
+        # El botón Procesar será proporcional al combo más ancho
+        btn_width = max(exact_calidad_width, exact_obs_width)
+        self.btn_procesar = QPushButton("Cambiar")
+        self.btn_procesar.setObjectName("btnProcesar")
+        self.btn_procesar.setToolTip("Cambia calidad y obs para todos los registros que se visualizan en la grilla")
+        self.btn_procesar.setMinimumWidth(btn_width)
+        self.btn_procesar.setMaximumWidth(btn_width)
+        self.btn_procesar.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        # Slot a definir por el usuario
+        self.btn_procesar.clicked.connect(self.cambiar_calidad_obs)
+        calidad_obs_layout.addWidget(self.btn_procesar)
+
+        # --- FIN combos y botón ---
+
+        content_layout.addLayout(calidad_obs_layout)
         
         # Tabla de datos de producción
         self.production_table = QTableView()
@@ -253,6 +323,58 @@ class ProductionControlWidget(QWidget):
         # Cargar tablas disponibles
         self.load_available_tables()
     
+    def cambiar_calidad_obs(self):
+        """
+        Cambia calidad y obs para todos los registros visualizados y actualiza codigoDeProducto.
+        """
+        # Obtener valores seleccionados
+        calidad_text = self.combo_calidad.currentText().strip()
+        obs_text = self.combo_obs.currentText().strip()
+        calidad_val = calidad_text.split(' ')[0] if calidad_text else ''
+        obs_val = obs_text.split(' ')[0] if obs_text else ''
+
+        # Indices de columnas
+        try:
+            col_calidad = self.table_model.column_names.index('calidad')
+        except ValueError:
+            QMessageBox.warning(self, 'Error', 'No se encontró la columna "calidad".')
+            return
+        try:
+            col_obs = self.table_model.column_names.index('obs')
+        except ValueError:
+            QMessageBox.warning(self, 'Error', 'No se encontró la columna "obs".')
+            return
+        try:
+            col_codprod = self.table_model.column_names.index('codigoDeProducto')
+        except ValueError:
+            QMessageBox.warning(self, 'Error', 'No se encontró la columna "codigoDeProducto".')
+            return
+
+        # Recorrer solo los registros visualizados (filtrados)
+        for proxy_row in range(self.proxy_model.rowCount()):
+            src_row = self.proxy_model.mapToSource(self.proxy_model.index(proxy_row, 0)).row()
+            row_data = self.table_model.data_rows[src_row]
+            # Cambiar calidad y obs
+            row_data[col_calidad] = calidad_val
+            row_data[col_obs] = obs_val
+            # Modificar codigoDeProducto
+            codprod = row_data[col_codprod]
+            if isinstance(codprod, str) and len(codprod) >= 8 and len(calidad_val) == 2 and len(obs_val) == 2:
+                codprod_new = (
+                    codprod[:4] + calidad_val + obs_val + codprod[8:]
+                )
+                row_data[col_codprod] = codprod_new
+            # Actualizar el modelo
+            ok = self.table_model.update_row(src_row, row_data)
+            if not ok:
+                bobina = row_data[self.table_model.column_names.index('bobina_num')] if 'bobina_num' in self.table_model.column_names else '?'
+                sec = row_data[self.table_model.column_names.index('sec')] if 'sec' in self.table_model.column_names else '?'
+                QMessageBox.critical(self, 'Error al guardar', f'No se pudo actualizar la fila Bobina: {bobina} / Sec: {sec}.\nRevise la base de datos o los permisos.')
+
+        self.table_model.layoutChanged.emit()
+        self.production_table.viewport().update()
+        QMessageBox.information(self, 'Cambios aplicados', 'Se cambiaron calidad y obs para todos los registros visualizados.')
+
     def load_available_tables(self):
         """Carga las tablas disponibles en la base de datos"""
         try:

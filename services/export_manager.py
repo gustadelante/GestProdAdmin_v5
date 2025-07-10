@@ -36,7 +36,7 @@ class ProductionExporter:
             filepath, _ = QFileDialog.getSaveFileName(
                 parent,
                 "Guardar archivo de exportación",
-                os.path.join(os.path.expanduser("~"), "Documents", default_filename),
+                os.path.join("c:/temp/", default_filename),
                 "Archivos de texto (*.txt)"
             )
             
@@ -60,7 +60,7 @@ class ProductionExporter:
                     # Obtener valores de los campos o usar valores por defecto - usando nombres en minúsculas ya que así se guardan
                     tipo_mov = record.get('tipo_mov', 'S')  # Usar valor real o 'S' por defecto
                     tipo_movimiento = record.get('tipomovimiento', 'PRODUCCION')
-                    codigo_operacion = "01"  # Valor fijo
+                    codigo_operacion = "P1"  # Valor fijo
                     codigo_producto = record.get('codigodeproducto', '') or ''  # Clave en minúsculas y evitar None
                     primera_udm = record.get('primeraundemedida', 'KG') or 'KG'  # Clave en minúsculas y evitar None
                     # Formatear cantidad_primera con 2 decimales y coma como separador decimal (formato 9,99)
@@ -73,7 +73,7 @@ class ProductionExporter:
                         # Si hay error de conversión, usar 0,00 como valor por defecto
                         cantidad_primera = "0,00"
                     segunda_udm = record.get('segundaundemedida', '') or ''  # Clave en minúsculas y evitar None
-                    cantidad_segunda = str(record.get('cantidadensegunda', '') or '')  # Clave en minúsculas y evitar None
+                    cantidad_segunda = str(record.get('cantidadensegunda', '1') or '')  # Clave en minúsculas y evitar None
                     lote = record.get('lote', f"{of}_{bobina_num}") or f"{of}_{bobina_num}"  # Evitar None
                     fecha_validez_lote = record.get('fechavalidezlote', '') or ''  # Clave en minúsculas y evitar None
                     fecha_elaboracion = record.get('fechaelaboracion', record.get('fecha', datetime.datetime.now().strftime('%d/%m/%Y'))) or ''  # Evitar None

@@ -23,6 +23,6 @@
     "Observaciones": [
       { "codigo": "00", "nombre": "" },
       { "codigo": "01", "nombre": "Enc.Simple" },
-      { "codigo": "03", "nombre": "Enc.Total" }
+      { "codigo": "02", "nombre": "Enc.Total" }
     ]
   }
