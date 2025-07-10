@@ -5,6 +5,7 @@
 GestProdAdmin - Aplicación de gestión de producción
 
 Este es el punto de entrada principal de la aplicación.
+Versión sin gestión de usuarios/permisos.
 """
 
 import sys

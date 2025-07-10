@@ -23,6 +23,39 @@ from ui.icons import ADD_ICON, EDIT_ICON, DELETE_ICON, CLEAR_ICON, COPY_ICON, sv
 class ProductionControlWidget(QWidget):
     """Widget para el control de producción"""
 
+    def _actualizar_codigos_producto_inicial(self):
+        """
+        Recorre todas las filas y actualiza el campo codigoDeProducto en la base de datos si es necesario.
+        Los dos dígitos de calidad van en la posición 5-6 y los de obs en la 7-8 del código.
+        """
+        try:
+            colnames = self.table_model.column_names
+            idx_codprod = colnames.index('codigoDeProducto') if 'codigoDeProducto' in colnames else None
+            idx_calidad = colnames.index('calidad') if 'calidad' in colnames else None
+            idx_obs = colnames.index('obs') if 'obs' in colnames else None
+            if idx_codprod is None or idx_calidad is None or idx_obs is None:
+                return
+            for idx, row in enumerate(self.table_model.data_rows):
+                codprod = str(row[idx_codprod]) if row[idx_codprod] is not None else ''
+                calidad = str(row[idx_calidad]) if row[idx_calidad] is not None else ''
+                obs = str(row[idx_obs]) if row[idx_obs] is not None else ''
+                # Normaliza a 2 dígitos
+                calidad2 = calidad.zfill(2)[-2:]
+                obs2 = obs.zfill(2)[-2:]
+                # Solo actualiza si el código es suficientemente largo
+                if len(codprod) >= 8:
+                    nuevo_codprod = (
+                        codprod[:4] + calidad2 + obs2 + codprod[8:]
+                    )
+                    if codprod != nuevo_codprod:
+                        new_row = row.copy()
+                        new_row[idx_codprod] = nuevo_codprod
+                        self.table_model.update_row(idx, new_row)
+        except Exception as e:
+            import logging
+            logging.error(f"Error en _actualizar_codigos_producto_inicial: {e}")
+
+
     # ...
 
     def delete_selected_rows(self):
@@ -239,6 +272,10 @@ class ProductionControlWidget(QWidget):
         self.combo_calidad.setObjectName("comboCalidad")
         self.combo_calidad.setEditable(True)
         self.combo_calidad.setInsertPolicy(QComboBox.NoInsert)
+
+        # --- Actualizar codigos de producto al iniciar ---
+        # (Ahora se llama tras cargar datos en load_table_data)
+
         max_calidad_width = 0
         for item in combo_data["Calidad"]:
             text = f"{item['codigo']} - {item['nombre']}"
@@ -325,13 +362,23 @@ class ProductionControlWidget(QWidget):
     
     def cambiar_calidad_obs(self):
         """
-        Cambia calidad y obs para todos los registros visualizados y actualiza codigoDeProducto.
+        Cambia calidad y obs para todos los registros visualizados y actualiza codprod/codigoDeProducto.
+        Asegura que los cambios se reflejen inmediatamente en la interfaz de usuario.
         """
+        import logging
         # Obtener valores seleccionados
         calidad_text = self.combo_calidad.currentText().strip()
         obs_text = self.combo_obs.currentText().strip()
         calidad_val = calidad_text.split(' ')[0] if calidad_text else ''
         obs_val = obs_text.split(' ')[0] if obs_text else ''
+
+        # Obtener el número total de filas visualizadas
+        filas_totales = self.proxy_model.rowCount()
+
+        # Verificar que se hayan seleccionado valores válidos
+        if not calidad_val or not obs_val:
+            QMessageBox.warning(self, 'Valores incompletos', 'Debe seleccionar valores válidos para calidad y observaciones.')
+            return
 
         # Indices de columnas
         try:
@@ -344,36 +391,94 @@ class ProductionControlWidget(QWidget):
         except ValueError:
             QMessageBox.warning(self, 'Error', 'No se encontró la columna "obs".')
             return
-        try:
+        
+        # Buscar la columna de código de producto (solo codigoDeProducto)
+        col_codprod = None
+        if 'codigoDeProducto' in self.table_model.column_names:
             col_codprod = self.table_model.column_names.index('codigoDeProducto')
-        except ValueError:
-            QMessageBox.warning(self, 'Error', 'No se encontró la columna "codigoDeProducto".')
+        else:
+            QMessageBox.warning(self, 'Error', 'No se encontró la columna de código de producto (codigoDeProducto).')
             return
 
-        # Recorrer solo los registros visualizados (filtrados)
-        for proxy_row in range(self.proxy_model.rowCount()):
-            src_row = self.proxy_model.mapToSource(self.proxy_model.index(proxy_row, 0)).row()
-            row_data = self.table_model.data_rows[src_row]
-            # Cambiar calidad y obs
-            row_data[col_calidad] = calidad_val
-            row_data[col_obs] = obs_val
-            # Modificar codigoDeProducto
-            codprod = row_data[col_codprod]
-            if isinstance(codprod, str) and len(codprod) >= 8 and len(calidad_val) == 2 and len(obs_val) == 2:
-                codprod_new = (
-                    codprod[:4] + calidad_val + obs_val + codprod[8:]
-                )
-                row_data[col_codprod] = codprod_new
-            # Actualizar el modelo
-            ok = self.table_model.update_row(src_row, row_data)
-            if not ok:
-                bobina = row_data[self.table_model.column_names.index('bobina_num')] if 'bobina_num' in self.table_model.column_names else '?'
-                sec = row_data[self.table_model.column_names.index('sec')] if 'sec' in self.table_model.column_names else '?'
-                QMessageBox.critical(self, 'Error al guardar', f'No se pudo actualizar la fila Bobina: {bobina} / Sec: {sec}.\nRevise la base de datos o los permisos.')
+        # Mostrar diálogo de progreso para operaciones con muchas filas
+        if filas_totales == 0:
+            QMessageBox.information(self, 'Sin datos', 'No hay registros visibles para actualizar.')
+            return
+        
+        mostrar_progreso = filas_totales > 10
+        progress = None
+        
+        if mostrar_progreso:
+            progress = QProgressDialog("Actualizando registros...", "Cancelar", 0, filas_totales, self)
+            progress.setWindowModality(Qt.WindowModal)
+            progress.setMinimumDuration(0)
+            progress.setValue(0)
 
-        self.table_model.layoutChanged.emit()
+        # Recorrer solo los registros visualizados (filtrados)
+        actualizados = 0
+        errores = 0
+        filas_modificadas = []
+        
+        for proxy_row in range(filas_totales):
+            if mostrar_progreso:
+                progress.setValue(proxy_row)
+                if progress.wasCanceled():
+                    break
+            
+            try:
+                proxy_index = self.proxy_model.index(proxy_row, 0)
+                src_row = self.proxy_model.mapToSource(proxy_index).row()
+                row_data = self.table_model.data_rows[src_row].copy()  # Usar una copia para no modificar el original hasta confirmar
+                
+                # Cambiar calidad y obs
+                row_data[col_calidad] = calidad_val
+                row_data[col_obs] = obs_val
+                
+                # Actualizar código de producto (posición 5-6 para calidad, 7-8 para obs)
+                if col_codprod is not None:
+                    codprod = str(row_data[col_codprod]) if row_data[col_codprod] is not None else ''
+                    if len(codprod) >= 8:
+                        calidad2 = calidad_val.zfill(2)[-2:]  # Normaliza a 2 dígitos
+                        obs2 = obs_val.zfill(2)[-2:]  # Normaliza a 2 dígitos
+                        nuevo_codprod = codprod[:4] + calidad2 + obs2 + codprod[8:]
+                        row_data[col_codprod] = nuevo_codprod
+                
+                # Actualizar la fila en el modelo y en la base de datos
+                if self.table_model.update_row(src_row, row_data):
+                    actualizados += 1
+                    filas_modificadas.append(src_row)
+                else:
+                    errores += 1
+                    logging.error(f"Error al actualizar fila {src_row}")
+            except Exception as e:
+                errores += 1
+                logging.error(f"Excepción al actualizar fila {src_row}: {str(e)}")
+
+        # Ya no es necesario commit manual aquí. Cada update_row hace commit y cierra la conexión.
+        # NO recargamos los datos completos porque update_row ya actualiza el modelo en memoria
+        
+        # Restaurar el filtro actual si es necesario
+        filtro_actual = self.of_filter.text()
+        if filtro_actual:
+            logging.info(f"Asegurando que se mantenga el filtro: {filtro_actual}")
+            self.proxy_model.set_of_filter(filtro_actual)
+        
+        # Forzar actualización visual de la tabla
         self.production_table.viewport().update()
-        QMessageBox.information(self, 'Cambios aplicados', 'Se cambiaron calidad y obs para todos los registros visualizados.')
+        
+        # Informar al usuario
+        if errores == 0:
+            QMessageBox.information(self, 'Cambios aplicados', 
+                                f'Se cambiaron calidad y obs para {actualizados} registros visualizados.\n'
+                                f'Los códigos de producto también fueron actualizados.')
+        else:
+            QMessageBox.warning(self, 'Cambios aplicados parcialmente', 
+                            f'Se actualizaron {actualizados} registros, pero hubo {errores} errores.\n'
+                            f'Revise el log para más detalles.')
+        
+        # Aplicar el filtro nuevamente
+        self.apply_filter()
+
 
     def load_available_tables(self):
         """Carga las tablas disponibles en la base de datos"""
@@ -433,7 +538,7 @@ class ProductionControlWidget(QWidget):
             if success:
                 # No es necesario ocultar la columna ID ya que no hay columna de selección
                 # La columna 0 ahora es la columna OF
-                pass
+                self._actualizar_codigos_producto_inicial()
             else:
                 QMessageBox.warning(
                     self, 

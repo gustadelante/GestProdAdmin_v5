@@ -52,8 +52,29 @@ class ProductionTableModel(QAbstractTableModel):
             if not self.production_data.connect():
                 return False
             
-            # Forzar el nombre de tabla a 'bobina' para asegurar persistencia en produccion.db
-            self.table_name = 'bobina'
+            # Verificar si la tabla existe y obtener su nombre real (case-insensitive)
+            self.production_data.cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND LOWER(name) = LOWER(?)",[table_name])
+            table_info = self.production_data.cursor.fetchone()
+            
+            if not table_info:
+                # Si no se encuentra la tabla, intentar con 'bobina' o 'bobinas'
+                self.production_data.cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND (LOWER(name) = 'bobina' OR LOWER(name) = 'bobinas')")
+                table_info = self.production_data.cursor.fetchone()
+                
+            if not table_info:
+                # Listar todas las tablas disponibles para diagnóstico
+                self.production_data.cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
+                tables = [t[0] for t in self.production_data.cursor.fetchall()]
+                import logging
+                logging.error(f"No se encontró la tabla '{table_name}' ni 'bobina'/'bobinas' en la base de datos. Tablas disponibles: {', '.join(tables)}")
+                self.production_data.disconnect()
+                return False
+                
+            # Usar el nombre real de la tabla
+            self.table_name = table_info[0]
+            import logging
+            logging.info(f"Usando tabla: {self.table_name}")
+            
             # Obtener datos
             columns, rows = self.production_data.get_production_data(self.table_name, filter_of)
             
@@ -367,37 +388,81 @@ class ProductionTableModel(QAbstractTableModel):
             # Buscar índices exactos
             def idx(col):
                 return self.column_names.index(col)
+            
             try:
                 idx_bobina = idx('bobina_num')
                 idx_sec = idx('sec')
                 idx_calidad = idx('calidad')
                 idx_obs = idx('obs')
-                idx_codprod = idx('codigoDeProducto') if 'codigoDeProducto' in self.column_names else None
+                
+                # Buscar la columna de código de producto (solo codigoDeProducto)
+                idx_codprod = None
+                codprod_column_name = None
+                if 'codigoDeProducto' in self.column_names:
+                    idx_codprod = idx('codigoDeProducto')
+                    codprod_column_name = 'codigoDeProducto'
+                    logging.info("Usando columna 'codigoDeProducto' para actualizar")
+                else:
+                    logging.warning("No se encontró la columna 'codigoDeProducto' en el modelo.")
+                
                 # Valores clave
                 bobina_value = current_data[idx_bobina]
                 sec_value = current_data[idx_sec]
+                
                 # Nuevos valores
                 calidad = row_data[idx_calidad]
                 obs = row_data[idx_obs]
                 codprod = row_data[idx_codprod] if idx_codprod is not None else None
+                
                 # Construir columnas/campos a actualizar
                 columns = ['calidad', 'obs']
                 values = [calidad, obs]
-                if idx_codprod is not None and codprod is not None:
+                
+                # Agregar codigoDeProducto si existe
+                if idx_codprod is not None and codprod_column_name == 'codigoDeProducto' and codprod is not None:
                     columns.append('codigoDeProducto')
                     values.append(codprod)
+                    logging.info(f"Agregando columna codigoDeProducto con valor {codprod} a la actualización")
+                
+                # Verificar si la tabla existe y obtener su nombre real (case-insensitive)
+                self.production_data.cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND LOWER(name) = 'bobina'")
+                table_info = self.production_data.cursor.fetchone()
+                
+                if not table_info:
+                    # Si no se encuentra 'bobina', intentar con 'bobinas'
+                    self.production_data.cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND LOWER(name) = 'bobinas'")
+                    table_info = self.production_data.cursor.fetchone()
+                
+                if not table_info:
+                    # Listar todas las tablas disponibles para diagnóstico
+                    self.production_data.cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
+                    tables = [t[0] for t in self.production_data.cursor.fetchall()]
+                    logging.error(f"No se encontró la tabla 'bobina' o 'bobinas' en la base de datos. Tablas disponibles: {', '.join(tables)}")
+                    self.production_data.disconnect()
+                    return False
+                    
+                table_name = table_info[0]  # Usar el nombre real de la tabla
+                logging.info(f"Usando tabla: {table_name}")
+                
                 # Log
-                logging.info(f"UPDATE bobina SET {columns} WHERE bobina_num={bobina_value} AND sec={sec_value}")
+                logging.info(f"UPDATE {table_name} SET {columns} WHERE bobina_num={bobina_value} AND sec={sec_value}")
                 logging.info(f"Valores: {values}")
-                # Ejecutar update directo
+                
+                # Ejecutar update directo con el nombre correcto de la tabla
                 result = self.production_data.update_row(
-                    'bobina',
+                    table_name,
                     columns,
                     values,
                     ['bobina_num', 'sec'],
                     [bobina_value, sec_value]
                 )
+                
+                # Forzar commit explícito
+                if result:
+                    self.production_data.connection.commit()
+                    
                 self.production_data.disconnect()
+                
                 if result:
                     self.data_rows[row_index][idx_calidad] = calidad
                     self.data_rows[row_index][idx_obs] = obs

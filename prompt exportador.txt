@@ -1,3 +1,9 @@
 prompt exportador
 
 En la vista o formulario production_of_detail.py necesito agregar un boton para exportar datos. Segun la arquitectura de la aplicacion crea un nuevo archivo para gestionar la exportación de datos. Según la orden de fabricación seleccionada  necesito exportar a txt los siguientes datos de los distintos registros bobina_num y sec de la orden de factricacion seleccionada (of). Voy a detallarte los campos de cada fila que tiene que tener el txt. Cada dato tiene que ir separado por ;  Los datos son: tipo_mov;tipomovimiento;01;codigodeproducto;primeraundemedida;cantidadenprimeraudm;segundaundemedida;cantidadensegunda;;;lote;fechavalidezlote;fechaelaboracion;;;;nroot;;cuentacontable;bobina_num"/"sec;turno;producto
+
+
+comando para generar ejecutable.
+python -m PyInstaller --name=GestProdAdmin --onefile --windowed --clean --noconfirm --add-data="produccion.db;." --add-data="config;config" --add-data="database;database" --add-data="security;security" --add-data="services;services" --add-data="ui;ui" --add-data="variablesCodProd.json;." --add-data="version_info.txt;." main.py
+
+python build_exe.py

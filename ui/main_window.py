@@ -35,7 +35,6 @@ class MainWindow(QMainWindow):
         """
         super().__init__()
         self.settings = settings
-        self.auth_manager = None
         
         # Configurar la ventana
         self.setWindowTitle("ProdAdmin")
@@ -50,24 +49,17 @@ class MainWindow(QMainWindow):
         # Asegurar que el menú siempre esté visible al iniciar
         self.settings.set_value('ui/menu_visible', True)
         
-        # --- INICIO: Acceso directo como admin/admin (login desactivado temporalmente) ---
+        # Conectar a la base de datos sin autenticación
         from database.connection import DatabaseConnection
-        from security.auth import AuthManager
         connection_string = self.settings.get_db_connection_string()
         self.db_connection = DatabaseConnection(connection_string)
         if self.db_connection.connect():
-            self.auth_manager = AuthManager(self.db_connection)
-            # Simula login como admin
-            if not self.auth_manager.authenticate('admin', 'admin'):
-                QMessageBox.critical(self, "Error", "No existe el usuario admin/admin en la base de datos.")
-            else:
-                self.update_menu_visibility()
-                self.showMaximized()
-                # Acceso directo a Producción > Control de Producción
-                self.change_page(2, "Control de Producción")
+            # Mostrar la aplicación directamente sin autenticación
+            self.showMaximized()
+            # Acceso directo a Control de Producción
+            self.change_page(1, "Control de Producción")
         else:
             QMessageBox.critical(self, "Error", "No se pudo conectar a la base de datos.")
-        # --- FIN: Acceso directo como admin/admin ---
     
     def init_ui(self):
         """Inicializa los componentes de la interfaz"""
@@ -110,13 +102,13 @@ class MainWindow(QMainWindow):
         
         # Botones del menú
         self.btn_dashboard = self.create_menu_button("Dashboard", "dashboard")
-        self.btn_users = self.create_menu_button("Usuarios", "users")
-        self.btn_production = self.create_menu_button("Producción", "production")
+        self.btn_production_control = self.create_menu_button("Control de Producción", "production_control")
+        self.btn_production_of = self.create_menu_button("Control de OF", "production_of")
         self.btn_settings = self.create_menu_button("Configuración", "settings")
         
         side_menu_layout.addWidget(self.btn_dashboard)
-        side_menu_layout.addWidget(self.btn_users)
-        side_menu_layout.addWidget(self.btn_production)
+        side_menu_layout.addWidget(self.btn_production_control)
+        side_menu_layout.addWidget(self.btn_production_of)
         side_menu_layout.addWidget(self.btn_settings)
         
         # Espaciador para empujar los botones hacia arriba
@@ -141,8 +133,6 @@ class MainWindow(QMainWindow):
         control_layout = QVBoxLayout(self.control_panel)
         control_layout.setContentsMargins(0, 0, 0, 0)
         control_layout.setSpacing(5)
-        
-        # El botón de pin ha sido eliminado
         
         # Botón para ocultar/mostrar menú
         self.btn_toggle_menu = QPushButton("<<")
@@ -180,12 +170,6 @@ class MainWindow(QMainWindow):
         # Espaciador para empujar el botón de cerrar sesión hacia la derecha
         top_bar_layout.addItem(QSpacerItem(40, 20, QSizePolicy.Expanding, QSizePolicy.Minimum))
         
-        # Botón de cerrar sesión
-        self.btn_logout = QPushButton("Cerrar Sesión")
-        self.btn_logout.setObjectName("btnLogout")
-        self.btn_logout.clicked.connect(self.logout)
-        top_bar_layout.addWidget(self.btn_logout)
-        
         content_layout.addWidget(top_bar)
         
         # Contenido de la página
@@ -194,13 +178,11 @@ class MainWindow(QMainWindow):
         
         # Páginas
         self.dashboard_page = DashboardWidget()
-        self.user_management_page = UserManagementWidget()
         self.production_control_page = ProductionControlWidget()
         self.production_of_control_page = ProductionOFDetailWidget()
         self.settings_page = QWidget()  # Página de configuración (por implementar)
         
         self.pages.addWidget(self.dashboard_page)
-        self.pages.addWidget(self.user_management_page)
         self.pages.addWidget(self.production_control_page)
         self.pages.addWidget(self.production_of_control_page)
         self.pages.addWidget(self.settings_page)
@@ -213,9 +195,9 @@ class MainWindow(QMainWindow):
         
         # Conectar señales de los botones del menú
         self.btn_dashboard.clicked.connect(lambda: self.change_page(0, "Dashboard"))
-        self.btn_users.clicked.connect(lambda: self.change_page(1, "Gestión de Usuarios"))
-        self.btn_production.clicked.connect(self.show_production_submenu)
-        self.btn_settings.clicked.connect(lambda: self.change_page(4, "Configuración"))
+        self.btn_production_control.clicked.connect(lambda: self.change_page(1, "Control de Producción"))
+        self.btn_production_of.clicked.connect(lambda: self.change_page(2, "Control de Órdenes de Fabricación"))
+        self.btn_settings.clicked.connect(lambda: self.change_page(3, "Configuración"))
     
     def create_menu_button(self, text, object_name):
         """Crea un botón para el menú lateral
@@ -241,19 +223,29 @@ class MainWindow(QMainWindow):
             title (str): Título de la página
         """
         # Desmarcar todos los botones
-        for btn in [self.btn_dashboard, self.btn_users, self.btn_production, self.btn_settings]:
+        for btn in [self.btn_dashboard, self.btn_production_control, self.btn_production_of, self.btn_settings]:
             btn.setChecked(False)
         
         # Marcar el botón actual
         sender = self.sender()
         if sender:
             sender.setChecked(True)
+        elif index == 0:
+            self.btn_dashboard.setChecked(True)
+        elif index == 1:
+            self.btn_production_control.setChecked(True)
+        elif index == 2:
+            self.btn_production_of.setChecked(True)
+        elif index == 3:
+            self.btn_settings.setChecked(True)
+        
+        # Cargar datos si es la página de Control de Órdenes de Fabricación
+        if index == 2 and hasattr(self.production_of_control_page, 'load_of_list'):
+            self.production_of_control_page.load_of_list()
         
         # Cambiar la página y el título
         self.pages.setCurrentIndex(index)
         self.page_title.setText(title)
-    
-    # El método toggle_pin_menu ha sido eliminado
     
     def toggle_menu(self):
         """Oculta o muestra el menú lateral con animación"""
@@ -312,102 +304,29 @@ class MainWindow(QMainWindow):
         self.apply_theme()
     
     def show_login_dialog(self):
-        """Muestra el diálogo de inicio de sesión"""
-        login_dialog = LoginDialog(self)
-        result = login_dialog.exec()
-        
-        if not result:
-            # Si el usuario cancela el inicio de sesión, cerrar la aplicación
-            self.close()
-        else:
-            # Actualizar la visibilidad de los menús después del inicio de sesión
-            self.update_menu_visibility()
-            # Mostrar la ventana principal después de un login exitoso
-            self.show()
+        """Método mantenido por compatibilidad pero sin funcionalidad"""
+        # Mostrar la ventana principal directamente sin autenticación
+        self.show()
     
     def set_auth_manager(self, auth_manager):
-        """Establece el gestor de autenticación
-        
-        Args:
-            auth_manager (AuthManager): Gestor de autenticación
-        """
-        self.auth_manager = auth_manager
-        
-        # Pasar el gestor de autenticación a los widgets que lo necesiten
-        self.user_management_page.set_auth_manager(auth_manager)
-        
-        # Actualizar visibilidad de los menús según permisos
-        self.update_menu_visibility()
+        """Método mantenido por compatibilidad pero sin funcionalidad"""
+        pass
     
     def logout(self):
-        """Cierra la sesión del usuario actual"""
-        if self.auth_manager:
-            self.auth_manager.logout()
-            self.show_login_dialog()
+        """Método mantenido por compatibilidad pero sin funcionalidad"""
+        pass
     
     def update_menu_visibility(self):
-        """Actualiza la visibilidad de los menús según los permisos del usuario"""
-        if not self.auth_manager or not self.auth_manager.get_current_user():
-            return
+        """Actualiza la visibilidad de los menús (todos visibles sin restricciones)"""
+        # Hacer visibles todos los botones sin verificar permisos
+        if hasattr(self, 'btn_production_control'):
+            self.btn_production_control.setVisible(True)
             
-        # Verificar permisos para gestión de usuarios
-        has_user_management = self.auth_manager.check_permission('USER_MANAGEMENT')
-        self.btn_users.setVisible(has_user_management)
+        if hasattr(self, 'btn_production_of'):
+            self.btn_production_of.setVisible(True)
         
-        # Verificar permisos para producción
-        has_production = self.auth_manager.check_permission('PRODUCTION')
-        self.btn_production.setVisible(has_production)
-        
-        # Verificar permisos para configuración
-        has_settings = self.auth_manager.check_permission('SETTINGS')
-        self.btn_settings.setVisible(has_settings)
-        
-        # Si el usuario está en una página para la que ya no tiene permiso,
-        # redirigir al dashboard
-        current_index = self.pages.currentIndex()
-        if (current_index == 1 and not has_user_management) or \
-           (current_index in [2, 3] and not has_production) or \
-           (current_index == 4 and not has_settings):
-            self.change_page(0, "Dashboard")
-            self.btn_dashboard.setChecked(True)
+        if hasattr(self, 'btn_settings'):
+            self.btn_settings.setVisible(True)
     
-    def show_production_submenu(self):
-        """Muestra un menú contextual con las opciones de producción"""
-        from PySide6.QtWidgets import QMenu
-        from PySide6.QtCore import QPoint
-        
-        # Marcar el botón de producción como seleccionado
-        self.btn_production.setChecked(True)
-        
-        # Crear menú contextual
-        menu = QMenu(self)
-        menu.setObjectName("productionSubmenu")
-
-        # Verificar permisos específicos para cada opción de producción
-        has_production_control = self.auth_manager.check_permission('PRODUCTION_CONTROL')
-        has_production_of_control = self.auth_manager.check_permission('PRODUCTION_OF_CONTROL')
-
-        # Agregar opciones solo si el usuario tiene los permisos correspondientes
-        if has_production_control:
-            action_control = menu.addAction("Control de Producción")
-            action_control.triggered.connect(lambda: self.change_page(2, "Control de Producción"))
-
-        if has_production_of_control:
-            action_of_control = menu.addAction("Control de Órdenes de Fabricación")
-            def go_to_of_control():
-                self.change_page(3, "Control de Órdenes de Fabricación")
-                # Forzar recarga de datos al acceder a la vista
-                if hasattr(self.production_of_control_page, 'load_of_list'):
-                    self.production_of_control_page.load_of_list()
-            action_of_control.triggered.connect(go_to_of_control)
-
-        # Mostrar menú bajo el botón de producción solo si hay opciones disponibles
-        if not menu.isEmpty():
-            button_pos = self.btn_production.mapToGlobal(QPoint(0, self.btn_production.height()))
-            menu.exec(button_pos)
-
-            # Desmarcar el botón de producción si no se seleccionó ninguna opción
-            # o si se cerró el menú sin seleccionar nada
-            current_index = self.pages.currentIndex()
-            if current_index not in [2, 3]:
-                self.btn_production.setChecked(False)
+    # El método show_production_submenu ha sido eliminado ya que ahora tenemos botones directos
+    # para Control de Producción y Control de Órdenes de Fabricación

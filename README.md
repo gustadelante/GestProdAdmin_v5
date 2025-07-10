@@ -1,42 +1,41 @@
-# GestProdAdmin
+# GestProdAdmin v5
 
-Aplicación de gestión de producción para entornos de red LAN con interfaz moderna desarrollada en Python.
+Aplicación de gestión de producción con interfaz moderna desarrollada en Python. Versión simplificada sin autenticación de usuarios.
 
 ## Características
 
 - **Interfaz Moderna**: Diseño basado en Material Design con PySide6
 - **Temas Claro y Oscuro**: Cambia entre temas con un solo clic
 - **Menú Lateral Ocultable**: Interfaz adaptable con animaciones fluidas
-- **Gestión de Usuarios**: Administración completa de usuarios, roles y permisos
 - **Dashboard Informativo**: Panel principal con información relevante
-- **Base de Datos MariaDB**: Almacenamiento robusto y confiable
+- **Base de Datos SQLite**: Almacenamiento local sin necesidad de servidor
 - **Arquitectura Modular**: Código organizado en capas para fácil mantenimiento
+- **Sin Autenticación**: Acceso directo a todas las funciones sin inicio de sesión
 
 ## Requisitos
 
-- Python 3.8 o superior
-- MariaDB 10.5 o superior
-- Paquetes Python (ver requirements.txt)
+- Para desarrollo:
+  - Python 3.8 o superior
+  - Paquetes Python (ver requirements.txt)
+- Para uso del ejecutable:
+  - Windows 10/11
 
 ## Estructura del Proyecto
 
 ```
-GestProdAdmin_v3/
+GestProdAdmin_v5/
 ├── config/             # Configuración de la aplicación
 ├── database/           # Modelos y conexión a la base de datos
-├── security/           # Autenticación y autorización
+├── security/           # Componentes de seguridad (deshabilitados)
+├── services/           # Servicios de la aplicación
 ├── ui/                 # Componentes de la interfaz de usuario
+├── build_exe.py        # Script para crear el ejecutable
 ├── main.py             # Punto de entrada de la aplicación
+├── produccion.db       # Base de datos SQLite
 └── README.md           # Este archivo
 ```
 
-## Configuración
-
-### Base de Datos
-
-1. Instalar MariaDB
-2. Crear una base de datos llamada `prod01`
-3. Configurar usuario `root` con contraseña `pepe01` o modificar los datos de conexión en `config/settings.py`
+## Configuración para Desarrollo
 
 ### Entorno Python
 
@@ -51,8 +50,49 @@ GestProdAdmin_v3/
 
 3. Instalar dependencias:
    ```
-   pip install PySide6 SQLAlchemy pymysql cryptography
+   pip install -r requirements.txt
    ```
+
+4. Ejecutar la aplicación:
+   ```
+   python main.py
+   ```
+
+## Construcción del Ejecutable
+
+El script `build_exe.py` permite crear dos versiones del ejecutable:
+
+1. **Versión con base de datos externa** (recomendada para uso diario):
+   - La base de datos se mantiene fuera del ejecutable para facilitar actualizaciones
+   - Comando: `python build_exe.py --external-db`
+
+2. **Versión todo incluido**:
+   - Todo empaquetado en un solo directorio
+   - Comando: `python build_exe.py --all-in-one`
+
+3. **Opciones adicionales**:
+   - Para crear un único archivo ejecutable: `python build_exe.py --onefile`
+   - Para crear ambas versiones: `python build_exe.py` (sin argumentos)
+
+### Ubicación de los Ejecutables
+
+Los ejecutables se crean en la carpeta `dist/`:
+- Versión con base de datos externa: `dist/GestProdAdmin_ExternalDB/`
+- Versión todo incluido: `dist/GestProdAdmin/`
+
+## Implementación y Uso
+
+### Versión con Base de Datos Externa
+
+1. Copie la carpeta `dist/GestProdAdmin_ExternalDB/` a la ubicación deseada
+2. Asegúrese de que el archivo `produccion.db` esté en la misma carpeta que el ejecutable
+3. Para actualizar la base de datos, simplemente reemplace el archivo `produccion.db`
+
+### Versión Todo Incluido
+
+1. Copie la carpeta `dist/GestProdAdmin/` a la ubicación deseada
+2. La base de datos está incluida dentro del ejecutable
+3. Para actualizaciones, deberá reemplazar todo el ejecutable
 
 ## Ejecución
 
