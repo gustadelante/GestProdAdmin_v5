@@ -65,7 +65,7 @@ class ProductionData:
     
     def get_table_schema(self, table_name: str) -> List[Tuple]:
         """
-        Obtiene el esquema de una tabla
+        Obtiene el esquema de una tabla.
         
         Args:
             table_name (str): Nombre de la tabla
@@ -76,6 +76,26 @@ class ProductionData:
         try:
             self.cursor.execute(f"PRAGMA table_info({table_name})")
             return self.cursor.fetchall()
+        except sqlite3.Error as e:
+            logging.error(f"Error al obtener esquema de tabla {table_name}: {str(e)}")
+            return []
+        
+    def get_table_columns(self, table_name: str) -> list:
+        """
+        Obtiene la lista de nombres de columnas de una tabla.
+        
+        Args:
+            table_name (str): Nombre de la tabla
+            
+        Returns:
+            list: Lista de nombres de columnas
+        """
+        try:
+            schema = self.get_table_schema(table_name)
+            return [col[1] for col in schema]  # El índice 1 contiene el nombre de la columna
+        except Exception as e:
+            logging.error(f"Error al obtener columnas de la tabla {table_name}: {str(e)}")
+            return []
         except sqlite3.Error as e:
             logging.error(f"Error al obtener esquema de tabla: {str(e)}")
             return []
@@ -172,9 +192,42 @@ class ProductionData:
             bool: True si la actualización fue exitosa, False en caso contrario
         """
         try:
+            logging.info(f"=== INICIANDO UPDATE_ROW EN BASE DE DATOS ===")
+            logging.info(f"Tabla: {table_name}")
+            logging.info(f"Columnas a actualizar: {columns}")
+            logging.info(f"Valores a establecer: {row_data}")
+            logging.info(f"Campos de condición: {where_fields}")
+            logging.info(f"Valores de condición: {where_values}")
+            
+            # Verificar si la tabla existe
+            self.cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", [table_name])
+            if not self.cursor.fetchone():
+                logging.error(f"La tabla '{table_name}' no existe en la base de datos")
+                return False
+            
             # Obtener el esquema de la tabla para identificar los tipos de columna
             schema = self.get_table_schema(table_name)
+            column_names = [col[1] for col in schema]
             column_types = {col[1]: col[2].upper() for col in schema}
+            
+            # Verificar que las columnas existan en la tabla
+            missing_cols = [col for col in columns if col not in column_names]
+            if missing_cols:
+                logging.warning(f"Las siguientes columnas no existen en la tabla {table_name}: {missing_cols}")
+                # Filtrar solo las columnas que existen
+                valid_indices = [i for i, col in enumerate(columns) if col in column_names]
+                columns = [columns[i] for i in valid_indices]
+                row_data = [row_data[i] for i in valid_indices]
+                
+            if not columns:
+                logging.error("No hay columnas válidas para actualizar")
+                return False
+            
+            # Verificar que los campos de condición existan
+            missing_where = [field for field in where_fields if field not in column_names]
+            if missing_where:
+                logging.error(f"Los siguientes campos de condición no existen: {missing_where}")
+                return False
             
             # Formatear fechas en row_data
             formatted_row_data = []
@@ -194,6 +247,7 @@ class ProductionData:
                 else:
                     formatted_where_values.append(value)
             
+            # Construir la consulta SQL
             set_clause = ', '.join([f"{col} = ?" for col in columns])
             where_clause = ' AND '.join([f"{field} = ?" for field in where_fields])
             query = f"UPDATE {table_name} SET {set_clause} WHERE {where_clause}"
@@ -202,16 +256,56 @@ class ProductionData:
             logging.info(f"Valores SET: {formatted_row_data}")
             logging.info(f"Valores WHERE: {formatted_where_values}")
 
+            # Ejecutar la actualización
             self.cursor.execute(query, formatted_row_data + formatted_where_values)
+            
+            # Hacer commit inmediato
             self.connection.commit()
+            
+            # Verificar filas afectadas
             affected = self.cursor.rowcount
             logging.info(f"Filas afectadas: {affected}")
+            
             if affected == 0:
-                logging.warning(f"No se actualizó ninguna fila para la clave: {where_fields} = {where_values}")
+                # Si no se actualizó ninguna fila, intentar obtener los valores actuales para diagnóstico
+                try:
+                    where_conditions = ' AND '.join([f"{field} = ?" for field in where_fields])
+                    self.cursor.execute(f"SELECT * FROM {table_name} WHERE {where_conditions}", formatted_where_values)
+                    existing = self.cursor.fetchone()
+                    if existing:
+                        logging.warning(f"Encontrado registro con las claves pero no se actualizó: {existing}")
+                    else:
+                        logging.warning(f"No se encontró ningún registro con las claves: {where_fields} = {formatted_where_values}")
+                        
+                        # Intentar buscar registros similares para diagnóstico
+                        if len(where_fields) >= 2:  # Si hay al menos dos campos de búsqueda
+                            first_field = where_fields[0]
+                            first_value = formatted_where_values[0]
+                            self.cursor.execute(f"SELECT * FROM {table_name} WHERE {first_field} = ? LIMIT 5", [first_value])
+                            similar = self.cursor.fetchall()
+                            if similar:
+                                logging.info(f"Registros con {first_field}={first_value}: {similar}")
+                except Exception as diag_error:
+                    logging.error(f"Error en diagnóstico: {str(diag_error)}")
+                
                 return False
+            
             return True
         except sqlite3.Error as e:
-            logging.error(f"Error al actualizar fila: {str(e)}")
+            logging.error(f"Error SQL al actualizar fila: {str(e)}")
+            # Intentar hacer rollback
+            try:
+                self.connection.rollback()
+            except:
+                pass
+            return False
+        except Exception as e:
+            logging.error(f"Error general al actualizar fila: {str(e)}", exc_info=True)
+            # Intentar hacer rollback
+            try:
+                self.connection.rollback()
+            except:
+                pass
             return False
 
     def delete_row(self, table_name: str, pk_name: str, pk_value, bobina: str = None, sec: str = None) -> bool:

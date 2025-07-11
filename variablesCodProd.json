@@ -14,7 +14,7 @@
       { "codigo": "07", "nombre": "Onda C" }
     ],
     "Calidad": [
-      { "codigo": "01", "nombre": "Starndard" },
+      { "codigo": "01", "nombre": "Standard" },
       { "codigo": "02", "nombre": "Segunda Sel." },
       { "codigo": "03", "nombre": "Rebobinado" },
       { "codigo": "04", "nombre": "Hojas Standard" },

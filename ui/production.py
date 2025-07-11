@@ -10,7 +10,7 @@ Contiene la implementación de las vistas relacionadas con la producción.
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QLabel, QHBoxLayout,
     QPushButton, QTableView, QFrame, QSizePolicy, QSpacerItem,
-    QLineEdit, QComboBox, QHeaderView, QMessageBox, QDialog, QStyle
+    QLineEdit, QComboBox, QHeaderView, QMessageBox, QDialog, QStyle, QProgressDialog
 )
 from PySide6.QtCore import Qt, QSortFilterProxyModel
 from PySide6.QtGui import QStandardItemModel, QStandardItem, QIcon
@@ -366,14 +366,18 @@ class ProductionControlWidget(QWidget):
         Asegura que los cambios se reflejen inmediatamente en la interfaz de usuario.
         """
         import logging
+        logging.info("=== INICIANDO CAMBIAR CALIDAD/OBS ===")
         # Obtener valores seleccionados
         calidad_text = self.combo_calidad.currentText().strip()
         obs_text = self.combo_obs.currentText().strip()
         calidad_val = calidad_text.split(' ')[0] if calidad_text else ''
         obs_val = obs_text.split(' ')[0] if obs_text else ''
 
+        logging.info(f"Valores seleccionados: calidad={calidad_val}, obs={obs_val}")
+
         # Obtener el número total de filas visualizadas
         filas_totales = self.proxy_model.rowCount()
+        logging.info(f"Filas visibles en la tabla: {filas_totales}")
 
         # Verificar que se hayan seleccionado valores válidos
         if not calidad_val or not obs_val:
@@ -383,21 +387,33 @@ class ProductionControlWidget(QWidget):
         # Indices de columnas
         try:
             col_calidad = self.table_model.column_names.index('calidad')
+            logging.info(f"Índice de columna 'calidad': {col_calidad}")
         except ValueError:
             QMessageBox.warning(self, 'Error', 'No se encontró la columna "calidad".')
+            logging.error("No se encontró la columna 'calidad' en el modelo")
             return
         try:
             col_obs = self.table_model.column_names.index('obs')
+            logging.info(f"Índice de columna 'obs': {col_obs}")
         except ValueError:
             QMessageBox.warning(self, 'Error', 'No se encontró la columna "obs".')
+            logging.error("No se encontró la columna 'obs' en el modelo")
             return
         
-        # Buscar la columna de código de producto (solo codigoDeProducto)
+        # Buscar la columna de código de producto (codigoDeProducto o codprod)
         col_codprod = None
+        col_name = None
         if 'codigoDeProducto' in self.table_model.column_names:
             col_codprod = self.table_model.column_names.index('codigoDeProducto')
+            col_name = 'codigoDeProducto'
+            logging.info(f"Usando columna 'codigoDeProducto' en índice: {col_codprod}")
+        elif 'codprod' in self.table_model.column_names:
+            col_codprod = self.table_model.column_names.index('codprod')
+            col_name = 'codprod'
+            logging.info(f"Usando columna 'codprod' en índice: {col_codprod}")
         else:
-            QMessageBox.warning(self, 'Error', 'No se encontró la columna de código de producto (codigoDeProducto).')
+            QMessageBox.warning(self, 'Error', 'No se encontró la columna de código de producto.')
+            logging.error("No se encontró ninguna columna de código de producto en el modelo")
             return
 
         # Mostrar diálogo de progreso para operaciones con muchas filas
@@ -430,6 +446,9 @@ class ProductionControlWidget(QWidget):
                 src_row = self.proxy_model.mapToSource(proxy_index).row()
                 row_data = self.table_model.data_rows[src_row].copy()  # Usar una copia para no modificar el original hasta confirmar
                 
+                # Registrar valores actuales para debug
+                logging.info(f"Fila {src_row}: valores actuales - calidad='{row_data[col_calidad]}', obs='{row_data[col_obs]}'")
+                
                 # Cambiar calidad y obs
                 row_data[col_calidad] = calidad_val
                 row_data[col_obs] = obs_val
@@ -441,21 +460,45 @@ class ProductionControlWidget(QWidget):
                         calidad2 = calidad_val.zfill(2)[-2:]  # Normaliza a 2 dígitos
                         obs2 = obs_val.zfill(2)[-2:]  # Normaliza a 2 dígitos
                         nuevo_codprod = codprod[:4] + calidad2 + obs2 + codprod[8:]
+                        logging.info(f"Actualizando código de producto: '{codprod}' -> '{nuevo_codprod}'")
                         row_data[col_codprod] = nuevo_codprod
                 
                 # Actualizar la fila en el modelo y en la base de datos
-                if self.table_model.update_row(src_row, row_data):
+                resultado = self.table_model.update_row(src_row, row_data)
+                logging.info(f"Resultado de update_row: {resultado}")
+                
+                if resultado:
                     actualizados += 1
                     filas_modificadas.append(src_row)
+                    
+                    # Actualizar visualmente la interfaz para esta fila específica
+                    self.table_model.dataChanged.emit(
+                        self.table_model.index(src_row, 0),
+                        self.table_model.index(src_row, len(self.table_model.column_names) - 1)
+                    )
                 else:
                     errores += 1
                     logging.error(f"Error al actualizar fila {src_row}")
             except Exception as e:
                 errores += 1
-                logging.error(f"Excepción al actualizar fila {src_row}: {str(e)}")
+                logging.error(f"Excepción al actualizar fila {src_row}: {str(e)}", exc_info=True)
 
-        # Ya no es necesario commit manual aquí. Cada update_row hace commit y cierra la conexión.
-        # NO recargamos los datos completos porque update_row ya actualiza el modelo en memoria
+        # Actualizar la barra de progreso al 100% al finalizar
+        if mostrar_progreso and progress and not progress.wasCanceled():
+            progress.setValue(filas_totales)
+            logging.info("Barra de progreso actualizada al 100%")
+        
+        # Forzar commit explícito en la base de datos
+        try:
+            from database.db_helper import get_db_path
+            import sqlite3
+            db_path = get_db_path()
+            conn = sqlite3.connect(db_path)
+            conn.commit()
+            conn.close()
+            logging.info("Commit explícito realizado")
+        except Exception as e:
+            logging.error(f"Error al hacer commit explícito: {str(e)}")
         
         # Restaurar el filtro actual si es necesario
         filtro_actual = self.of_filter.text()
@@ -463,14 +506,16 @@ class ProductionControlWidget(QWidget):
             logging.info(f"Asegurando que se mantenga el filtro: {filtro_actual}")
             self.proxy_model.set_of_filter(filtro_actual)
         
-        # Forzar actualización visual de la tabla
+        # Forzar actualización visual de toda la tabla
         self.production_table.viewport().update()
+        self.production_table.reset()  # Forzar reset completo de la tabla
         
         # Informar al usuario
         if errores == 0:
             QMessageBox.information(self, 'Cambios aplicados', 
                                 f'Se cambiaron calidad y obs para {actualizados} registros visualizados.\n'
                                 f'Los códigos de producto también fueron actualizados.')
+            logging.info(f"Proceso finalizado exitosamente: {actualizados} registros actualizados")
         else:
             QMessageBox.warning(self, 'Cambios aplicados parcialmente', 
                             f'Se actualizaron {actualizados} registros, pero hubo {errores} errores.\n'

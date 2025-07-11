@@ -382,56 +382,87 @@ class ProductionTableModel(QAbstractTableModel):
         Garantiza persistencia real en la base.
         """
         import logging
+        logging.info(f"=== INICIANDO UPDATE_ROW PARA FILA {row_index} ===")
         if 0 <= row_index < len(self.data_rows):
             self.production_data.connect()
             current_data = self.data_rows[row_index].copy()
             # Buscar índices exactos
             def idx(col):
-                return self.column_names.index(col)
+                return self.column_names.index(col) if col in self.column_names else -1
             
             try:
+                # Verificar que existan las columnas necesarias
                 idx_bobina = idx('bobina_num')
-                idx_sec = idx('sec')
-                idx_calidad = idx('calidad')
-                idx_obs = idx('obs')
+                if idx_bobina == -1:
+                    logging.error("No se encontró la columna 'bobina_num' en el modelo")
+                    self.production_data.disconnect()
+                    return False
                 
-                # Buscar la columna de código de producto (solo codigoDeProducto)
+                idx_sec = idx('sec')
+                if idx_sec == -1:
+                    logging.error("No se encontró la columna 'sec' en el modelo")
+                    self.production_data.disconnect()
+                    return False
+                
+                idx_calidad = idx('calidad')
+                if idx_calidad == -1:
+                    logging.error("No se encontró la columna 'calidad' en el modelo")
+                    self.production_data.disconnect()
+                    return False
+                
+                idx_obs = idx('obs')
+                if idx_obs == -1:
+                    logging.error("No se encontró la columna 'obs' en el modelo")
+                    self.production_data.disconnect()
+                    return False
+                
+                # Buscar la columna de código de producto (codigoDeProducto o codprod)
                 idx_codprod = None
                 codprod_column_name = None
                 if 'codigoDeProducto' in self.column_names:
                     idx_codprod = idx('codigoDeProducto')
                     codprod_column_name = 'codigoDeProducto'
                     logging.info("Usando columna 'codigoDeProducto' para actualizar")
+                elif 'codprod' in self.column_names:
+                    idx_codprod = idx('codprod')
+                    codprod_column_name = 'codprod'
+                    logging.info("Usando columna 'codprod' para actualizar")
                 else:
-                    logging.warning("No se encontró la columna 'codigoDeProducto' en el modelo.")
+                    logging.warning("No se encontró ninguna columna de código de producto en el modelo")
                 
                 # Valores clave
                 bobina_value = current_data[idx_bobina]
                 sec_value = current_data[idx_sec]
+                
+                logging.info(f"Valores clave: bobina_num={bobina_value}, sec={sec_value}")
+                
+                # Valores actuales
+                old_calidad = current_data[idx_calidad]
+                old_obs = current_data[idx_obs]
+                old_codprod = current_data[idx_codprod] if idx_codprod is not None else None
                 
                 # Nuevos valores
                 calidad = row_data[idx_calidad]
                 obs = row_data[idx_obs]
                 codprod = row_data[idx_codprod] if idx_codprod is not None else None
                 
+                logging.info(f"Valores a actualizar: calidad: '{old_calidad}' -> '{calidad}', obs: '{old_obs}' -> '{obs}'")
+                if idx_codprod is not None:
+                    logging.info(f"Código de producto: '{old_codprod}' -> '{codprod}'")
+                
                 # Construir columnas/campos a actualizar
                 columns = ['calidad', 'obs']
                 values = [calidad, obs]
                 
-                # Agregar codigoDeProducto si existe
-                if idx_codprod is not None and codprod_column_name == 'codigoDeProducto' and codprod is not None:
-                    columns.append('codigoDeProducto')
+                # Agregar código de producto si existe
+                if idx_codprod is not None and codprod is not None:
+                    columns.append(codprod_column_name)  # Usar el nombre correcto de la columna
                     values.append(codprod)
-                    logging.info(f"Agregando columna codigoDeProducto con valor {codprod} a la actualización")
+                    logging.info(f"Agregando columna {codprod_column_name} con valor {codprod} a la actualización")
                 
                 # Verificar si la tabla existe y obtener su nombre real (case-insensitive)
-                self.production_data.cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND LOWER(name) = 'bobina'")
+                self.production_data.cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND LOWER(name) IN ('bobina', 'bobinas')")
                 table_info = self.production_data.cursor.fetchone()
-                
-                if not table_info:
-                    # Si no se encuentra 'bobina', intentar con 'bobinas'
-                    self.production_data.cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND LOWER(name) = 'bobinas'")
-                    table_info = self.production_data.cursor.fetchone()
                 
                 if not table_info:
                     # Listar todas las tablas disponibles para diagnóstico
@@ -444,41 +475,80 @@ class ProductionTableModel(QAbstractTableModel):
                 table_name = table_info[0]  # Usar el nombre real de la tabla
                 logging.info(f"Usando tabla: {table_name}")
                 
-                # Log
-                logging.info(f"UPDATE {table_name} SET {columns} WHERE bobina_num={bobina_value} AND sec={sec_value}")
-                logging.info(f"Valores: {values}")
+                # Verificar las columnas en la tabla de la base de datos
+                db_columns = self.production_data.get_table_columns(table_name)
+                logging.info(f"Columnas en tabla {table_name}: {db_columns}")
+                
+                # Filtrar columnas que realmente existen en la base de datos
+                valid_columns = []
+                valid_values = []
+                for col, val in zip(columns, values):
+                    if col.lower() in [c.lower() for c in db_columns]:
+                        valid_columns.append(col)
+                        valid_values.append(val)
+                    else:
+                        logging.warning(f"Columna '{col}' no existe en la tabla {table_name} de la base de datos")
+                
+                if not valid_columns:
+                    logging.error("No hay columnas válidas para actualizar")
+                    self.production_data.disconnect()
+                    return False
+                
+                # Asegurar que las columnas de clave también existan en la base de datos
+                if 'bobina_num' not in db_columns and 'bobina_num'.lower() not in [c.lower() for c in db_columns]:
+                    logging.error(f"La columna 'bobina_num' no existe en la tabla {table_name}")
+                    self.production_data.disconnect()
+                    return False
+                if 'sec' not in db_columns and 'sec'.lower() not in [c.lower() for c in db_columns]:
+                    logging.error(f"La columna 'sec' no existe en la tabla {table_name}")
+                    self.production_data.disconnect()
+                    return False
                 
                 # Ejecutar update directo con el nombre correcto de la tabla
+                logging.info(f"Ejecutando UPDATE {table_name} SET {', '.join([f'{c}=?' for c in valid_columns])} WHERE bobina_num=? AND sec=?")
+                logging.info(f"Valores SET: {valid_values}, Valores WHERE: [{bobina_value}, {sec_value}]")
+                
                 result = self.production_data.update_row(
                     table_name,
-                    columns,
-                    values,
+                    valid_columns,
+                    valid_values,
                     ['bobina_num', 'sec'],
                     [bobina_value, sec_value]
                 )
                 
                 # Forzar commit explícito
                 if result:
-                    self.production_data.connection.commit()
+                    try:
+                        self.production_data.connection.commit()
+                        logging.info("Commit explícito realizado en update_row")
+                    except Exception as e:
+                        logging.error(f"Error al hacer commit: {str(e)}")
                     
                 self.production_data.disconnect()
                 
                 if result:
+                    # Actualizar datos en memoria
                     self.data_rows[row_index][idx_calidad] = calidad
                     self.data_rows[row_index][idx_obs] = obs
                     if idx_codprod is not None:
                         self.data_rows[row_index][idx_codprod] = codprod
+                    
+                    # Notificar cambios en la interfaz
                     top_left = self.index(row_index, 0)
                     bottom_right = self.index(row_index, len(self.column_names) - 1)
                     self.dataChanged.emit(top_left, bottom_right)
+                    logging.info("Datos actualizados en memoria y notificación enviada")
                     return True
                 else:
                     logging.error(f"No se pudo actualizar la fila bobina_num={bobina_value}, sec={sec_value}")
                     return False
             except Exception as e:
-                logging.error(f"Error en update_row: {str(e)}")
-                self.production_data.disconnect()
+                logging.error(f"Error en update_row: {str(e)}", exc_info=True)
+                if self.production_data.connection:
+                    self.production_data.disconnect()
                 return False
+        else:
+            logging.error(f"Índice de fila fuera de rango: {row_index} (total filas: {len(self.data_rows)})")
         return False
 
 
