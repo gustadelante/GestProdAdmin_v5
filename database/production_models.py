@@ -818,25 +818,25 @@ class ProductionData:
                     params = []
                     
                     # Determinar los nuevos valores basados en codprod_normalized
-                    if codprod_normalized == '03':
-                        new_calidad = '05'
+                    if codprod_normalized == '3':
+                        new_calidad = '01'
                         new_obs = '02'
-                    elif codprod_normalized == '01':
+                    elif codprod_normalized == '1':
                         new_calidad = '01'
                         new_obs = '00'
-                    elif codprod_normalized == '02':
+                    elif codprod_normalized == '2':
                         new_calidad = '01'
-                        new_obs = '01'
-                    elif codprod_normalized == '04':
+                        new_obs = '02'
+                    elif codprod_normalized == '4':
                         new_calidad = '01'
-                        new_obs = '01'
-                    elif codprod_normalized == '05':
-                        new_calidad = '05'
-                        new_obs = '05'
-                    elif codprod_normalized == '06':
+                        new_obs = '00'
+                    elif codprod_normalized == '5':
                         new_calidad = '01'
-                        new_obs = '01'
-                    elif codprod_normalized == '07':
+                        new_obs = '02'
+                    elif codprod_normalized == '6':
+                        new_calidad = '01'
+                        new_obs = '02'
+                    elif codprod_normalized == '7':
                         new_calidad = '01'
                         new_obs = '00'
                     else:
