@@ -422,8 +422,14 @@ class ProductionData:
             return "00000"
             
         try:
+            # Normalizar separador decimal por si viene con coma ("82,5" -> "82.5")
+            if isinstance(ancho, str):
+                ancho_norm = ancho.strip().replace(',', '.')
+            else:
+                ancho_norm = ancho
+
             # Convertir a float y manejar el signo negativo si existe
-            valor = float(ancho)
+            valor = float(ancho_norm)
             es_negativo = valor < 0
             valor = abs(valor)
             
