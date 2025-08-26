@@ -6,4 +6,12 @@ En la vista o formulario production_of_detail.py necesito agregar un boton para 
 comando para generar ejecutable.
 python -m PyInstaller --name=GestProdAdmin --onefile --windowed --clean --noconfirm --add-data="produccion.db;." --add-data="config;config" --add-data="database;database" --add-data="security;security" --add-data="services;services" --add-data="ui;ui" --add-data="variablesCodProd.json;." --add-data="version_info.txt;." main.py
 
-python build_exe.py
+
+
+o este:
+pyinstaller --name GestProdAdmin --onefile --windowed --clean --noconfirm `
+  --add-data "config;config" --add-data "database;database" `
+  --add-data "security;security" --add-data "services;services" `
+  --add-data "ui;ui" --add-data "variablesCodProd.json;." `
+  --add-data "version_info.txt;." main.py
+

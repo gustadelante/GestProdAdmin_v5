@@ -635,7 +635,7 @@ class ProductionData:
 
                     # Actualizar el lote si está vacío o es NULL y tenemos of y sec
                     if is_empty(lote_actual) and of is not None and sec is not None:
-                        nuevo_lote = f"{of}/{sec}"
+                        nuevo_lote = f"{of}/{sec}"                        
                         updates.append("lote = ?")
                         params.append(nuevo_lote)
 
@@ -819,7 +819,7 @@ class ProductionData:
                     
                     # Determinar los nuevos valores basados en codprod_normalized
                     if codprod_normalized == '3':
-                        new_calidad = '01'
+                        new_calidad = '05'
                         new_obs = '02'
                     elif codprod_normalized == '1':
                         new_calidad = '01'
@@ -831,7 +831,7 @@ class ProductionData:
                         new_calidad = '01'
                         new_obs = '00'
                     elif codprod_normalized == '5':
-                        new_calidad = '01'
+                        new_calidad = '05'
                         new_obs = '02'
                     elif codprod_normalized == '6':
                         new_calidad = '01'

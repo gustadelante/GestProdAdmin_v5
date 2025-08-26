@@ -76,6 +76,14 @@ class ProductionRecordDialog(QDialog):
         self.column_names = column_names
         self.is_edit_mode = row_data is not None and not is_copy_mode
         self.field_widgets = {}  # Diccionario para mantener referencias a los widgets
+        # Índices de columnas relevantes
+        try:
+            lower_names = [n.lower() for n in self.column_names]
+        except Exception:
+            lower_names = []
+        self.idx_codprod = next((i for i, n in enumerate(lower_names) if n == 'codprod'), None)
+        self.idx_producto = next((i for i, n in enumerate(lower_names) if n == 'producto'), None)
+        self.idx_codigoDeProducto = next((i for i, n in enumerate(lower_names) if n == 'codigodeproducto'), None)
         
         # Inicializar la interfaz
         self.init_ui(row_data)
@@ -104,6 +112,8 @@ class ProductionRecordDialog(QDialog):
         form_layout = QFormLayout(form_widget)
         
         # Crear widgets para cada campo
+        self.peso_widget = None
+        self.cant1_widget = None  # CantidadEnPrimeraUdM
         for col_idx, col_name in enumerate(self.column_names):
             col_name_lower = col_name.lower()
             widget = None
@@ -290,6 +300,88 @@ class ProductionRecordDialog(QDialog):
                         widget.setValue(0.0)
                 else:
                     widget.setValue(0.0)
+                if col_name_lower == "peso":
+                    self.peso_widget = widget
+
+            # --- Campos por requerimiento de alta ---
+            elif col_name_lower == "tipo_mov":
+                widget = QLineEdit()
+                # Prefill solo en alta (no en edición ni copia)
+                if not self.is_edit_mode and not self.is_copy_mode:
+                    widget.setText("ALTA")
+                elif row_data and col_idx < len(row_data):
+                    widget.setText(str(row_data[col_idx]) if row_data[col_idx] is not None else "")
+
+            elif col_name_lower == "tipomovimiento":
+                widget = QLineEdit()
+                if not self.is_edit_mode and not self.is_copy_mode:
+                    widget.setText("006")
+                elif row_data and col_idx < len(row_data):
+                    widget.setText(str(row_data[col_idx]) if row_data[col_idx] is not None else "")
+
+            elif col_name_lower == "deposito":
+                widget = QLineEdit()
+                if not self.is_edit_mode and not self.is_copy_mode:
+                    widget.setText("01")
+                elif row_data and col_idx < len(row_data):
+                    widget.setText(str(row_data[col_idx]) if row_data[col_idx] is not None else "")
+
+            elif col_name_lower == "primeraundemedida":
+                widget = QLineEdit()
+                if not self.is_edit_mode and not self.is_copy_mode:
+                    widget.setText("KG")
+                elif row_data and col_idx < len(row_data):
+                    widget.setText(str(row_data[col_idx]) if row_data[col_idx] is not None else "")
+
+            elif col_name_lower == "cantidadenprimeraudm":
+                widget = QDoubleSpinBox()
+                widget.setRange(0, 999999.99)
+                widget.setDecimals(2)
+                widget.setSingleStep(0.1)
+                widget.setSpecialValueText("0.00")
+                # Prefill con peso si es alta
+                if not self.is_edit_mode and not self.is_copy_mode and self.peso_widget is not None:
+                    widget.setValue(float(self.peso_widget.value()))
+                elif row_data and col_idx < len(row_data) and row_data[col_idx] is not None:
+                    try:
+                        widget.setValue(float(row_data[col_idx]))
+                    except:
+                        widget.setValue(0.0)
+                else:
+                    widget.setValue(0.0)
+                self.cant1_widget = widget
+
+            elif col_name_lower == "codclie":
+                widget = QLineEdit()
+                if not self.is_edit_mode and not self.is_copy_mode:
+                    widget.setText("000011")
+                elif row_data and col_idx < len(row_data):
+                    widget.setText(str(row_data[col_idx]) if row_data[col_idx] is not None else "")
+
+            elif col_name_lower == "cuentacontable":
+                widget = QLineEdit()
+                if not self.is_edit_mode and not self.is_copy_mode:
+                    widget.setText("1401010000")
+                elif row_data and col_idx < len(row_data):
+                    widget.setText(str(row_data[col_idx]) if row_data[col_idx] is not None else "")
+
+            elif col_name_lower == "segundaundemedida":
+                widget = QLineEdit()
+                if not self.is_edit_mode and not self.is_copy_mode:
+                    widget.setText("UN")
+                elif row_data and col_idx < len(row_data):
+                    widget.setText(str(row_data[col_idx]) if row_data[col_idx] is not None else "")
+
+            elif col_name_lower == "cantidadensegunda":
+                widget = QSpinBox()
+                widget.setRange(0, 999999)
+                if not self.is_edit_mode and not self.is_copy_mode:
+                    widget.setValue(1)
+                elif row_data and col_idx < len(row_data) and row_data[col_idx] is not None:
+                    try:
+                        widget.setValue(int(row_data[col_idx]))
+                    except:
+                        widget.setValue(0)
             
             elif col_name_lower == "turno":
                 widget = QComboBox()
@@ -329,6 +421,17 @@ class ProductionRecordDialog(QDialog):
             if widget:
                 form_layout.addRow(f"{col_name}:", widget)
                 print(f"[DEBUG] Campo agregado al formulario: {col_name}")
+
+            # Conectar señales para blanquear codigoDeProducto y actualizar producto
+            try:
+                if col_name_lower in ["ancho", "gramaje", "diametro"] and hasattr(widget, 'valueChanged'):
+                    widget.valueChanged.connect(self._on_trigger_field_changed)
+                elif col_name_lower in ["codprod", "alistamiento", "calidad", "obs"] and isinstance(widget, QComboBox):
+                    widget.currentIndexChanged.connect(self._on_trigger_field_changed)
+                    if widget.isEditable():
+                        widget.editTextChanged.connect(self._on_trigger_field_changed)
+            except Exception as e:
+                logging.error(f"Error conectando señales para {col_name}: {e}")
         
         # Configurar el scroll area con el formulario
         scroll_area.setWidget(form_widget)
@@ -339,6 +442,55 @@ class ProductionRecordDialog(QDialog):
         button_box.accepted.connect(self.validate_and_accept)
         button_box.rejected.connect(self.reject)
         main_layout.addWidget(button_box)
+
+        # Sincronizar CantidadEnPrimeraUdM con Peso si ambos widgets existen
+        try:
+            if self.peso_widget is not None and self.cant1_widget is not None:
+                def _sync_cantidad_desde_peso(val):
+                    try:
+                        self.cant1_widget.setValue(float(val))
+                    except Exception:
+                        pass
+                self.peso_widget.valueChanged.connect(_sync_cantidad_desde_peso)
+        except Exception as e:
+            logging.error(f"Error configurando sincronización peso -> CantidadEnPrimeraUdM: {e}")
+
+    def _on_trigger_field_changed(self, *args, **kwargs):
+        """Se dispara cuando cambian campos que obligan a blanquear codigoDeProducto y recalcular producto."""
+        try:
+            # Blanquear codigoDeProducto si existe
+            if self.idx_codigoDeProducto is not None and self.idx_codigoDeProducto in self.field_widgets:
+                w = self.field_widgets[self.idx_codigoDeProducto]
+                if isinstance(w, QLineEdit):
+                    w.setText("")
+                elif isinstance(w, QComboBox):
+                    # Por si en alguna tabla es combo
+                    if w.isEditable():
+                        w.clearEditText()
+                    w.setCurrentIndex(-1)
+
+            # Actualizar 'producto' con el segundo carácter de 'codprod'
+            if self.idx_producto is not None and self.idx_producto in self.field_widgets:
+                producto_char = ""
+                # Obtener código desde el combo de codprod si está disponible
+                codigo = ""
+                if hasattr(self, 'codprod_combo') and isinstance(self.codprod_combo, QComboBox):
+                    codigo = self.codprod_combo.currentData() or ""
+                    if not codigo:
+                        text = self.codprod_combo.currentText() or ""
+                        codigo = text.split(" - ")[0].strip() if text else ""
+                elif self.idx_codprod is not None and self.idx_codprod in self.field_widgets:
+                    wcod = self.field_widgets[self.idx_codprod]
+                    if isinstance(wcod, QLineEdit):
+                        codigo = (wcod.text() or "").strip()
+                if len(codigo) >= 2:
+                    producto_char = codigo[1]
+                # Establecer en el widget de producto (asumido QLineEdit)
+                wprod = self.field_widgets[self.idx_producto]
+                if isinstance(wprod, QLineEdit):
+                    wprod.setText(producto_char)
+        except Exception as e:
+            logging.error(f"Error en _on_trigger_field_changed: {e}")
     
     def validate_and_accept(self):
         """

@@ -79,7 +79,8 @@ class ProductionExporter:
                     fecha_elaboracion = record.get('fechaelaboracion', record.get('fecha', datetime.datetime.now().strftime('%d/%m/%Y'))) or ''  # Evitar None
                     nroot = record.get('nroot', of) or of  # Usando 'nroot' en minúsculas y evitar None
                     cuenta_contable = record.get('cuentacontable', '') or ''
-                    bobina_sec = f"{bobina_num}/{sec}"
+                    #bobina_sec = f"{bobina_num}/{sec}" #cambio para evitar la / por long de campo , se aprovecha el lugar para el sec
+                    bobina_sec = f"{bobina_num}{sec}"
                     turno = record.get('turno', '') or ''
                     producto = record.get('producto', codigo_producto) or codigo_producto or ''  # Usar producto o codigoDeProducto y evitar None
                     

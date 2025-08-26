@@ -296,6 +296,29 @@ class ProductionTableModel(QAbstractTableModel):
             col_index = index.column()
             print(f"setData: editando fila {row_index}, columna {col_index}")
             self.data_rows[row_index][col_index] = value
+
+            # --- Lógica adicional: si se edita ancho/gramaje/diametro/codprod/alistamiento/calidad/obs ---
+            try:
+                col_name_lower = self.column_names[col_index].strip().lower()
+                trigger_fields = {"ancho", "gramaje", "diametro", "codprod", "alistamiento", "calidad", "obs"}
+                if col_name_lower in trigger_fields:
+                    lower_names = [c.strip().lower() for c in self.column_names]
+                    # Blanquear codigoDeProducto si existe
+                    if "codigodeproducto" in lower_names:
+                        idx_codigo = lower_names.index("codigodeproducto")
+                        self.data_rows[row_index][idx_codigo] = ""
+                    # Actualizar 'producto' con segundo carácter de 'codprod'
+                    if "producto" in lower_names:
+                        idx_producto = lower_names.index("producto")
+                        codigo = ""
+                        if "codprod" in lower_names:
+                            idx_codprod = lower_names.index("codprod")
+                            codigo = str(self.data_rows[row_index][idx_codprod] or "")
+                        # Tomar segundo carácter si disponible
+                        nuevo_producto = codigo[1] if len(codigo) >= 2 else ""
+                        self.data_rows[row_index][idx_producto] = nuevo_producto
+            except Exception as e:
+                print(f"setData: error aplicando lógica de dependencias: {e}")
             # Persistir el cambio en la base de datos usando bobina y sec
             self.production_data.connect()
             db_columns = [col for col in self.column_names if col.lower() != 'obs']
@@ -321,7 +344,8 @@ class ProductionTableModel(QAbstractTableModel):
             )
             print(f"setData: resultado update_row = {res}")
             self.production_data.disconnect()
-            self.dataChanged.emit(index, index, [role])
+            # Emitir dataChanged para toda la fila para refrescar campos dependientes
+            self.dataChanged.emit(self.index(row_index, 0), self.index(row_index, len(self.column_names)-1), [role])
             return True
         print("setData: role no es EditRole")
         return False
