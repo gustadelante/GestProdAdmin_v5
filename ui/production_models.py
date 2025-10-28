@@ -307,15 +307,20 @@ class ProductionTableModel(QAbstractTableModel):
                     if "codigodeproducto" in lower_names:
                         idx_codigo = lower_names.index("codigodeproducto")
                         self.data_rows[row_index][idx_codigo] = ""
-                    # Actualizar 'producto' con segundo carácter de 'codprod'
+                    # Actualizar 'producto' con los dos primeros caracteres de 'codprod'
                     if "producto" in lower_names:
                         idx_producto = lower_names.index("producto")
                         codigo = ""
                         if "codprod" in lower_names:
                             idx_codprod = lower_names.index("codprod")
                             codigo = str(self.data_rows[row_index][idx_codprod] or "")
-                        # Tomar segundo carácter si disponible
-                        nuevo_producto = codigo[1] if len(codigo) >= 2 else ""
+                        # Tomar los dos primeros caracteres (rellenar con '0' si falta)
+                        if len(codigo) >= 2:
+                            nuevo_producto = codigo[:2]
+                        elif len(codigo) == 1:
+                            nuevo_producto = codigo + '0'
+                        else:
+                            nuevo_producto = "00"
                         self.data_rows[row_index][idx_producto] = nuevo_producto
             except Exception as e:
                 print(f"setData: error aplicando lógica de dependencias: {e}")

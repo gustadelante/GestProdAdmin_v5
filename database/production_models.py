@@ -857,12 +857,12 @@ class ProductionData:
                     params.append(new_obs)
                     
                     # Actualizar el campo producto si está vacío y codprod tiene al menos 2 dígitos
-                    if not producto_str and len(codprod_str) >= 2:
-                        # Tomar el segundo dígito de codprod (índice 1) como producto
-                        new_producto = codprod_str[1] if len(codprod_str) > 1 else '0'
+                    if not producto_str and len(codprod_str) >= 1:
+                        # Tomar los dos primeros caracteres de codprod como producto (rellenar con '0' si falta)
+                        new_producto = (codprod_str[:2] if len(codprod_str) >= 2 else codprod_str.ljust(2, '0'))
                         updates.append("producto = ?")
                         params.append(new_producto)
-                        logging.debug(f"Actualizando producto: '{producto_str}' -> '{new_producto}' (segundo dígito de codprod='{codprod_str}')")
+                        logging.debug(f"Actualizando producto: '{producto_str}' -> '{new_producto}' (primeros dos caracteres de codprod='{codprod_str}')")
                     
                     # Establecer valores por defecto para fechas si están vacías
                     hoy = datetime.now().date()

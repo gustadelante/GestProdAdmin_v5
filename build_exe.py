@@ -39,6 +39,17 @@ def create_executable(external_db=True, onefile=False):
             '--windowed',
             '--clean',
             '--noconfirm',
+            # SQLAlchemy y sus dependencias
+            '--hidden-import=sqlalchemy',
+            '--hidden-import=sqlalchemy.sql',
+            '--hidden-import=sqlalchemy.orm',
+            '--hidden-import=sqlalchemy.ext',
+            '--hidden-import=sqlalchemy.ext.declarative',
+            '--hidden-import=sqlalchemy.engine',
+            '--hidden-import=sqlalchemy.pool',
+            '--hidden-import=sqlalchemy.event',
+            '--hidden-import=sqlalchemy.sql.default_comparator',
+            # Datos y módulos de la aplicación
             '--add-data=variablesCodProd.json;.',
             '--add-data=version_info.txt;.',
             '--add-data=config;config',

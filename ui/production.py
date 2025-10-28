@@ -338,6 +338,9 @@ class ProductionControlWidget(QWidget):
         self.production_table.setSortingEnabled(True)
         self.production_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
         self.production_table.horizontalHeader().setStretchLastSection(True)
+        # Deshabilitar edición por doble clic en la grilla
+        current_triggers = self.production_table.editTriggers()
+        self.production_table.setEditTriggers(current_triggers & ~QTableView.DoubleClicked)
         
         # Ocultar los números de fila (vertical header)
         self.production_table.verticalHeader().setVisible(False)
