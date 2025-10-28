@@ -74,13 +74,27 @@ class ProductionExporter:
                         cantidad_primera = "0,00"
                     segunda_udm = record.get('segundaundemedida', '') or ''  # Clave en minúsculas y evitar None
                     cantidad_segunda = str(record.get('cantidadensegunda', '1') or '')  # Clave en minúsculas y evitar None
-                    lote = record.get('lote', f"{of}_{bobina_num}") or f"{of}_{bobina_num}"  # Evitar None
+                    # Formatear el lote con OF de 6 dígitos (rellenar con ceros a la izquierda)
+                    lote_value = record.get('lote', f"{of}_{bobina_num}")
+                    if lote_value and '/' in lote_value:
+                        # Si el lote tiene formato "numero/secuencia", formatear la parte izquierda a 6 dígitos
+                        partes = lote_value.split('/')
+                        lote = f"{partes[0].zfill(6)}/{partes[1]}"
+                    elif lote_value and '_' in lote_value:
+                        # Si el lote tiene formato "of_bobina", formatear of a 6 dígitos
+                        partes = lote_value.split('_')
+                        lote = f"{partes[0].zfill(6)}/{partes[1]}" if len(partes) > 1 else lote_value
+                    else:
+                        # Formato por defecto: of con 6 dígitos / bobina_num
+                        lote = f"{str(of).zfill(6)}/{bobina_num}"
                     fecha_validez_lote = record.get('fechavalidezlote', '') or ''  # Clave en minúsculas y evitar None
                     fecha_elaboracion = record.get('fechaelaboracion', record.get('fecha', datetime.datetime.now().strftime('%d/%m/%Y'))) or ''  # Evitar None
-                    nroot = record.get('nroot', of) or of  # Usando 'nroot' en minúsculas y evitar None
+                    # Formatear nroot a 6 caracteres, rellenando con ceros a la izquierda
+                    nroot = str(record.get('nroot', of) or of).zfill(6)
                     cuenta_contable = record.get('cuentacontable', '') or ''
                     #bobina_sec = f"{bobina_num}/{sec}" #cambio para evitar la / por long de campo , se aprovecha el lugar para el sec
-                    bobina_sec = f"{bobina_num}{sec}"
+                    # Formatear bobina_sec a 6 caracteres, rellenando con ceros a la izquierda
+                    bobina_sec = f"{bobina_num}{sec}".zfill(6)
                     turno = record.get('turno', '') or ''
                     producto = record.get('producto', codigo_producto) or codigo_producto or ''  # Usar producto o codigoDeProducto y evitar None
                     
