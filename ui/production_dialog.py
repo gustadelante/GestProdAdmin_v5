@@ -527,7 +527,14 @@ class ProductionRecordDialog(QDialog):
             elif isinstance(widget, QDateEdit):
                 # Para todos los campos de fecha (incluyendo fecha, created_at, etc.)
                 # Usar el formato dd/MM/yyyy para guardar
-                value = widget.date().toString("dd/MM/yyyy")
+                date_obj = widget.date()
+                # Verificar que la fecha sea válida (no nula)
+                if date_obj.isValid() and date_obj.year() > 1900:
+                    value = date_obj.toString("dd/MM/yyyy")
+                else:
+                    # Si la fecha no es válida, usar la fecha actual
+                    from PySide6.QtCore import QDate
+                    value = QDate.currentDate().toString("dd/MM/yyyy")
             elif isinstance(widget, QDateTimeEdit):
                 # Por si acaso hay algún campo de fecha/hora que necesite manejarse de otra manera
                 value = widget.dateTime().toString("dd/MM/yyyy HH:mm")

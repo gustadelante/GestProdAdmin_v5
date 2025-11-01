@@ -9,6 +9,7 @@ Contiene los modelos para la gestión de datos de producción.
 
 import logging
 import os
+import re
 import sqlite3
 from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional, Tuple

@@ -127,10 +127,8 @@ class ProductionTableModel(QAbstractTableModel):
             
             # Establecer los nombres de columnas en el orden deseado
             self.column_names = ordered_columns.copy()
-            # Agregar columna de observaciones al final
-            #self.column_names.append("Obs")
-            # Agregar columna vacía para Obs al final
-            self.data_rows = [list(row) + [""] for row in reordered_rows]
+            # No agregar columnas extras para evitar desajustes
+            self.data_rows = [list(row) for row in reordered_rows]
             # Crear una fila por defecto con valores vacíos para cada columna
             self.default_row = [""] * len(self.column_names)
             # Limpiar selecciones previas
@@ -437,7 +435,9 @@ class ProductionTableModel(QAbstractTableModel):
                 bobina_value = current_data[idx_bobina]
                 sec_value = current_data[idx_sec]
                 
-                logging.info(f"Valores clave: bobina_num={bobina_value}, sec={sec_value}")
+                logging.info(f"Valores clave: bobina_num={bobina_value} (tipo: {type(bobina_value)}), sec={sec_value} (tipo: {type(sec_value)})")
+                logging.info(f"Datos actuales completos: {current_data}")
+                logging.info(f"Datos nuevos completos: {row_data}")
                 
                 # Verificar si la tabla existe y obtener su nombre real (case-insensitive)
                 self.production_data.cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND LOWER(name) IN ('bobina', 'bobinas')")
@@ -478,6 +478,26 @@ class ProductionTableModel(QAbstractTableModel):
                     # Verificar si el valor ha cambiado
                     old_value = current_data[col_idx] if col_idx < len(current_data) else None
                     new_value = row_data[col_idx] if col_idx < len(row_data) else None
+                    
+                    # Formatear campos numéricos con ceros a la izquierda (6 dígitos)
+                    if col_name.lower() in ['of', 'bobina_num'] and new_value:
+                        try:
+                            # Convertir a string y rellenar con ceros a la izquierda
+                            new_value = str(new_value).strip().zfill(6)
+                            logging.info(f"Formateando '{col_name}' a 6 dígitos: {new_value}")
+                        except Exception as e:
+                            logging.warning(f"No se pudo formatear '{col_name}': {e}")
+
+                    # Asegurar que los campos de fecha nunca vayan vacíos/None
+                    if col_name.lower() in ['fecha', 'fechavalidezlote', 'fechaelaboracion']:
+                        try:
+                            # Si viene None o cadena vacía, usar fecha actual
+                            if new_value is None or str(new_value).strip() == "":
+                                from datetime import datetime
+                                new_value = datetime.now().strftime('%d/%m/%Y')
+                                logging.info(f"Default para '{col_name}': {new_value}")
+                        except Exception as e:
+                            logging.warning(f"No se pudo asignar default a fecha '{col_name}': {e}")
                     
                     # Agregar a la lista de actualización
                     columns_to_update.append(col_name)

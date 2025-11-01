@@ -127,6 +127,12 @@ class ProductionControlWidget(QWidget):
         if dialog.exec() == QDialog.Accepted:
             # Obtener datos del formulario
             new_row_data = dialog.get_row_data()
+            import logging
+            logging.info(f"=== DATOS DEL DIÁLOGO ===")
+            logging.info(f"Número de columnas en modelo: {len(self.table_model.column_names)}")
+            logging.info(f"Número de valores del diálogo: {len(new_row_data)}")
+            logging.info(f"Columnas: {self.table_model.column_names}")
+            logging.info(f"Valores: {new_row_data}")
             # Actualizar fila en el modelo y base de datos
             updated = self.table_model.update_row(row_index, new_row_data)
             if updated:
