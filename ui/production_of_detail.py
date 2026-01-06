@@ -292,6 +292,23 @@ class ProductionOFDetailWidget(QWidget):
                 sec_title.setAlignment(Qt.AlignCenter)
                 sec_title.setStyleSheet("font-weight: bold; font-size: 12pt;")
                 group_layout.addWidget(sec_title)
+
+                ancho_values = []
+                for item in sec_data[sec]:
+                    v = item.get("ancho")
+                    if v is None:
+                        continue
+                    text = str(v).strip()
+                    if not text:
+                        continue
+                    ancho_values.append(text)
+
+                ancho_distinct = sorted(set(ancho_values))
+                if len(ancho_distinct) > 1:
+                    ancho_warning = QLabel(f"Atención: hay anchos diferentes en esta grilla ({', '.join(ancho_distinct)})")
+                    ancho_warning.setAlignment(Qt.AlignCenter)
+                    ancho_warning.setStyleSheet("color: #b45309; font-weight: bold;")
+                    group_layout.addWidget(ancho_warning)
                 
                 # Tabla para este grupo
                 table = QTableWidget()
@@ -434,8 +451,41 @@ class ProductionOFDetailWidget(QWidget):
             data = []
             for row in rows:
                 record = {}
+                # Guardar también las claves con el nombre original de columna
                 for i, col in enumerate(columns):
-                    record[col.lower()] = row[i]  # Usar claves en minúsculas
+                    record[col] = row[i]
+
+                lower_to_cols = {}
+                for col in columns:
+                    lower_to_cols.setdefault(col.lower(), []).append(col)
+
+                def _pick_value(cols_for_key):
+                    values = [(c, row[columns.index(c)]) for c in cols_for_key]
+                    for c, v in values:
+                        if v is not None and (not isinstance(v, str) or v.strip() != ''):
+                            return v
+                    return values[0][1] if values else None
+
+                for lower_key, cols_for_key in lower_to_cols.items():
+                    if len(cols_for_key) == 1:
+                        record[lower_key] = row[columns.index(cols_for_key[0])]
+                        continue
+
+                    if lower_key == 'fechaelaboracion':
+                        preferred = [c for c in cols_for_key if c == 'fechaelaboracion']
+                        preferred += [c for c in cols_for_key if c == 'fechaElaboracion']
+                        preferred += [c for c in cols_for_key if c not in preferred]
+                        record[lower_key] = _pick_value(preferred)
+                        continue
+
+                    if lower_key == 'fechavalidezlote':
+                        preferred = [c for c in cols_for_key if c == 'fechavalidezlote']
+                        preferred += [c for c in cols_for_key if c == 'fechaValidezLote']
+                        preferred += [c for c in cols_for_key if c not in preferred]
+                        record[lower_key] = _pick_value(preferred)
+                        continue
+
+                    record[lower_key] = _pick_value(cols_for_key)
                 data.append(record)
             
             # Llamar al exportador para guardar los datos

@@ -31,6 +31,47 @@ class ProductionExporter:
             bool: True si la exportación fue exitosa, False en caso contrario
         """
         try:
+            def _format_date(value: Any, add_years: int = 0) -> str:
+                if value is None:
+                    return ''
+
+                d: datetime.date | None = None
+
+                if isinstance(value, datetime.datetime):
+                    d = value.date()
+                elif isinstance(value, datetime.date):
+                    d = value
+                else:
+                    text = str(value).strip()
+                    if not text:
+                        return ''
+
+                    if ' ' in text:
+                        text = text.split(' ', 1)[0].strip()
+                    if 'T' in text:
+                        text = text.split('T', 1)[0].strip()
+
+                    # Intentar parsear distintos formatos comunes
+                    for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y"):
+                        try:
+                            d = datetime.datetime.strptime(text, fmt).date()
+                            break
+                        except ValueError:
+                            continue
+
+                    if d is None:
+                        # Fallback: devolver lo que venga, pero sin hora
+                        return text
+
+                if add_years:
+                    try:
+                        d = d.replace(year=d.year + add_years)
+                    except ValueError:
+                        # Manejo de 29/02 al sumar años no bisiestos
+                        d = d.replace(month=2, day=28, year=d.year + add_years)
+
+                return d.strftime("%d/%m/%Y")
+
             # Solicitar al usuario la ubicación del archivo
             default_filename = f"produccion_OF_{of}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
             filepath, _ = QFileDialog.getSaveFileName(
@@ -87,8 +128,11 @@ class ProductionExporter:
                     else:
                         # Formato por defecto: of con 6 dígitos / bobina_num
                         lote = f"{str(of).zfill(6)}/{bobina_num}"
-                    fecha_validez_lote = record.get('fechavalidezlote', '') or ''  # Clave en minúsculas y evitar None
-                    fecha_elaboracion = record.get('fechaelaboracion', record.get('fecha', datetime.datetime.now().strftime('%d/%m/%Y'))) or ''  # Evitar None
+                    fecha_validez_lote = _format_date(
+                        record.get('fechaValidezLote') or record.get('fechavalidezlote') or '',
+                        add_years=5,
+                    )
+                    fecha_elaboracion = _format_date(record.get('fechaElaboracion') or record.get('fechaelaboracion') or '')
                     # Formatear nroot a 6 caracteres, rellenando con ceros a la izquierda
                     nroot = str(record.get('nroot', of) or of).zfill(6)
                     cuenta_contable = record.get('cuentacontable', '') or ''
@@ -97,6 +141,9 @@ class ProductionExporter:
                     bobina_sec = f"{bobina_num}{sec}".zfill(6)
                     turno = record.get('turno', '') or ''
                     producto = record.get('producto', codigo_producto) or codigo_producto or ''  # Usar producto o codigoDeProducto y evitar None
+                    producto = str(producto).strip()
+                    if producto.isdigit():
+                        producto = producto.zfill(2)
                     
                     # Construir la línea con los campos separados por punto y coma
                     line = f"{tipo_mov};{tipo_movimiento};{codigo_operacion};{codigo_producto};{primera_udm};"

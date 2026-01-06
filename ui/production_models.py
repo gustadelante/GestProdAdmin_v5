@@ -480,7 +480,14 @@ class ProductionTableModel(QAbstractTableModel):
                     new_value = row_data[col_idx] if col_idx < len(row_data) else None
                     
                     # Formatear campos numéricos con ceros a la izquierda (6 dígitos)
-                    if col_name.lower() in ['of', 'bobina_num'] and new_value:
+                    # if col_name.lower() in ['of', 'bobina_num'] and new_value:
+                    #     try:
+                    #         # Convertir a string y rellenar con ceros a la izquierda
+                    #         new_value = str(new_value).strip().zfill(6)
+                    #         logging.info(f"Formateando '{col_name}' a 6 dígitos: {new_value}")
+                    #     except Exception as e:
+                    #         logging.warning(f"No se pudo formatear '{col_name}': {e}")
+                    if col_name.lower() in ['bobina_num'] and new_value:
                         try:
                             # Convertir a string y rellenar con ceros a la izquierda
                             new_value = str(new_value).strip().zfill(6)

@@ -21,7 +21,10 @@ from ui.dashboard import DashboardWidget
 from ui.user_management import UserManagementWidget
 from ui.production import ProductionControlWidget
 from ui.production_of_detail import ProductionOFDetailWidget
+from ui.alistamiento import AlistamientoWidget
 from ui.styles import get_stylesheet, LIGHT_PALETTE, DARK_PALETTE
+from database.db_helper import get_db_path
+from config.sqlserver_config import SQLServerConfig
 
 
 class MainWindow(QMainWindow):
@@ -104,11 +107,13 @@ class MainWindow(QMainWindow):
         self.btn_dashboard = self.create_menu_button("Dashboard", "dashboard")
         self.btn_production_control = self.create_menu_button("Control de Producción", "production_control")
         self.btn_production_of = self.create_menu_button("Control de OF", "production_of")
+        self.btn_alistamiento = self.create_menu_button("Alistamiento", "alistamiento")
         self.btn_settings = self.create_menu_button("Configuración", "settings")
         
         side_menu_layout.addWidget(self.btn_dashboard)
         side_menu_layout.addWidget(self.btn_production_control)
         side_menu_layout.addWidget(self.btn_production_of)
+        side_menu_layout.addWidget(self.btn_alistamiento)
         side_menu_layout.addWidget(self.btn_settings)
         
         # Espaciador para empujar los botones hacia arriba
@@ -180,11 +185,24 @@ class MainWindow(QMainWindow):
         self.dashboard_page = DashboardWidget()
         self.production_control_page = ProductionControlWidget()
         self.production_of_control_page = ProductionOFDetailWidget()
+        self.alistamiento_page = AlistamientoWidget()
         self.settings_page = QWidget()  # Página de configuración (por implementar)
+        
+        # Configurar SQL Server para Alistamiento
+        sqlserver_config = SQLServerConfig()
+        # Consulta SQL para obtener clientes desde SA1010
+        cliente_query = """
+            SELECT DISTINCT A1_COD AS CODCLIENTE,
+                            A1_NOME AS NOMBRE 
+            FROM SA1010
+            WHERE A1_LOJA = '01'
+        """
+        self.alistamiento_page.set_database_config(sqlserver_config, cliente_query)
         
         self.pages.addWidget(self.dashboard_page)
         self.pages.addWidget(self.production_control_page)
         self.pages.addWidget(self.production_of_control_page)
+        self.pages.addWidget(self.alistamiento_page)
         self.pages.addWidget(self.settings_page)
         
         content_layout.addWidget(self.pages)
@@ -197,7 +215,8 @@ class MainWindow(QMainWindow):
         self.btn_dashboard.clicked.connect(lambda: self.change_page(0, "Dashboard"))
         self.btn_production_control.clicked.connect(lambda: self.change_page(1, "Control de Producción"))
         self.btn_production_of.clicked.connect(lambda: self.change_page(2, "Control de Órdenes de Fabricación"))
-        self.btn_settings.clicked.connect(lambda: self.change_page(3, "Configuración"))
+        self.btn_alistamiento.clicked.connect(lambda: self.change_page(3, "Alistamiento"))
+        self.btn_settings.clicked.connect(lambda: self.change_page(4, "Configuración"))
     
     def create_menu_button(self, text, object_name):
         """Crea un botón para el menú lateral
@@ -223,7 +242,7 @@ class MainWindow(QMainWindow):
             title (str): Título de la página
         """
         # Desmarcar todos los botones
-        for btn in [self.btn_dashboard, self.btn_production_control, self.btn_production_of, self.btn_settings]:
+        for btn in [self.btn_dashboard, self.btn_production_control, self.btn_production_of, self.btn_alistamiento, self.btn_settings]:
             btn.setChecked(False)
         
         # Marcar el botón actual
@@ -237,6 +256,8 @@ class MainWindow(QMainWindow):
         elif index == 2:
             self.btn_production_of.setChecked(True)
         elif index == 3:
+            self.btn_alistamiento.setChecked(True)
+        elif index == 4:
             self.btn_settings.setChecked(True)
         
         # Cargar datos si es la página de Control de Órdenes de Fabricación
@@ -324,6 +345,9 @@ class MainWindow(QMainWindow):
             
         if hasattr(self, 'btn_production_of'):
             self.btn_production_of.setVisible(True)
+        
+        if hasattr(self, 'btn_alistamiento'):
+            self.btn_alistamiento.setVisible(True)
         
         if hasattr(self, 'btn_settings'):
             self.btn_settings.setVisible(True)

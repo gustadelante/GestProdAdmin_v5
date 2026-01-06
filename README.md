@@ -53,7 +53,26 @@ GestProdAdmin_v5/
    pip install -r requirements.txt
    ```
 
-4. Ejecutar la aplicación:
+### Configuración de SQL Server
+
+4. Configurar credenciales de SQL Server:
+   - Copiar el archivo `config/sqlserver_credentials.example.json` a `config/sqlserver_credentials.json`
+   - Editar `config/sqlserver_credentials.json` con tus credenciales reales:
+     ```json
+     {
+         "server": "TU_SERVIDOR\\INSTANCIA",
+         "port": "1433",
+         "database": "TU_BASE_DE_DATOS",
+         "username": "TU_USUARIO",
+         "password": "TU_CONTRASEÑA",
+         "driver": "ODBC Driver 17 for SQL Server",
+         "timeout": "5"
+     }
+     ```
+   - **IMPORTANTE**: El archivo `sqlserver_credentials.json` está en `.gitignore` y NO se subirá a GitHub
+   - Nunca hagas commit del archivo con credenciales reales
+
+5. Ejecutar la aplicación:
    ```
    python main.py
    ```

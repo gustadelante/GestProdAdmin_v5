@@ -74,6 +74,14 @@ def get_stylesheet(theme='light'):
         font-weight: bold;
     }}
     
+    /* Título del formulario de Alistamiento */
+    #alistamientoTitle {{
+        color: {text_color};
+        font-size: 18pt;
+        font-weight: bold;
+        padding: 10px;
+    }}
+    
     /* Estilos generales */
     QWidget {{
         font-family: 'Segoe UI', 'Arial', sans-serif;

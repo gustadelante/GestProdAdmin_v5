@@ -724,7 +724,7 @@ class ProductionData:
             
             # Verificar que las columnas necesarias existan
             required_columns = {'codprod', 'calidad', 'obs', 'producto'}
-            optional_columns = {'fecha', 'fechaElaboracion', 'fechaValidezLote'}
+            optional_columns = {'fecha', 'fechaElaboracion', 'fechaValidezLote', 'fechaelaboracion', 'fechavalidezlote'}
             
             # Verificar columnas requeridas
             missing_required = required_columns - set(columns)
@@ -738,9 +738,12 @@ class ProductionData:
                 logging.warning(f"Columnas opcionales no encontradas: {', '.join(missing_optional)}")
                 
             # Determinar qué columnas opcionales están presentes
-            has_fecha = 'fecha' in columns
-            has_fecha_elab = 'fechaElaboracion' in columns
-            has_fecha_validez = 'fechaValidezLote' in columns
+            fecha_col = next((c for c in columns if c.lower() == 'fecha'), None)
+            fecha_elab_col = next((c for c in columns if c.lower() == 'fechaelaboracion'), None)
+            fecha_validez_col = next((c for c in columns if c.lower() == 'fechavalidezlote'), None)
+            has_fecha = fecha_col is not None
+            has_fecha_elab = fecha_elab_col is not None
+            has_fecha_validez = fecha_validez_col is not None
                 
             # Obtener todos los registros
             self.cursor.execute(f"SELECT rowid, * FROM {table_name}")
@@ -759,16 +762,11 @@ class ProductionData:
             fecha_validez_idx = -1
             
             if has_fecha:
-                fecha_idx = columns.index('fecha') + 1
+                fecha_idx = columns.index(fecha_col) + 1
             if has_fecha_elab:
-                fecha_elab_idx = columns.index('fechaElaboracion') + 1
+                fecha_elab_idx = columns.index(fecha_elab_col) + 1
             if has_fecha_validez:
-                fecha_validez_idx = columns.index('fechaValidezLote') + 1
-            
-            # Obtener fechas actuales (solo si se necesitan)
-            hoy = datetime.now().date()
-            fecha_elab = hoy.strftime('%d/%m/%Y')
-            fecha_validez = (hoy + timedelta(days=5*365)).strftime('%d/%m/%Y')  # 5 años después
+                fecha_validez_idx = columns.index(fecha_validez_col) + 1
             
             updated_count = 0
             total_processed = 0
@@ -864,53 +862,6 @@ class ProductionData:
                         updates.append("producto = ?")
                         params.append(new_producto)
                         logging.debug(f"Actualizando producto: '{producto_str}' -> '{new_producto}' (primeros dos caracteres de codprod='{codprod_str}')")
-                    
-                    # Establecer valores por defecto para fechas si están vacías
-                    hoy = datetime.now().date()
-                    
-                    # Para el campo 'fecha' (fecha actual)
-                    if has_fecha:
-                        fecha_str = str(fecha_actual).strip() if fecha_actual is not None else ''
-                        if not fecha_str:
-                            fecha_default = hoy.strftime('%d/%m/%Y')
-                            updates.append("fecha = ?")
-                            params.append(fecha_default)
-                            logging.debug(f"Estableciendo fecha por defecto: '{fecha_str}' -> '{fecha_default}'")
-                    
-                    # Para el campo 'fechaElaboracion' (usar el valor del campo fecha)
-                    if has_fecha_elab and fecha_actual is not None:
-                        try:
-                            # Convertir la fecha a objeto datetime si es necesario
-                            if isinstance(fecha_actual, str):
-                                # Intentar diferentes formatos de fecha
-                                for fmt in ('%Y-%m-%d', '%d/%m/%Y', '%Y/%m/%d', '%d-%m-%Y'):
-                                    try:
-                                        fecha_dt = datetime.strptime(fecha_actual, fmt)
-                                        break
-                                    except ValueError:
-                                        continue
-                                else:
-                                    # Si no se pudo parsear, usar la fecha actual
-                                    fecha_dt = hoy
-                            else:
-                                # Si ya es un objeto fecha
-                                fecha_dt = fecha_actual
-                            
-                            # Formatear la fecha a dd/mm/yyyy
-                            fecha_formateada = fecha_dt.strftime('%d/%m/%Y')
-                            updates.append("fechaElaboracion = ?")
-                            params.append(fecha_formateada)
-                            logging.debug(f"Actualizando fechaElaboracion: '{fecha_elab_actual}' -> '{fecha_formateada}'")
-                            
-                            # Actualizar fechaValidezLote (fecha + 5 años)
-                            if has_fecha_validez:
-                                fecha_validez = (fecha_dt + timedelta(days=5*365)).strftime('%d/%m/%Y')
-                                updates.append("fechaValidezLote = ?")
-                                params.append(fecha_validez)
-                                logging.debug(f"Actualizando fechaValidezLote: '{fecha_validez_actual}' -> '{fecha_validez}'")
-                                
-                        except Exception as e:
-                            logging.error(f"Error al procesar fechas: {str(e)}", exc_info=True)
                     
                     logging.debug(f"Actualizando registro {rowid}: codprod='{codprod_str}' (normalizado='{codprod_normalized}') -> calidad='{new_calidad}', obs='{new_obs}'")
                     
